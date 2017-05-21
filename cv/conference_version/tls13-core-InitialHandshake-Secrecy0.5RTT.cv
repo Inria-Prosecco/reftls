@@ -1,0 +1,552 @@
+(* This file proves properties of the initial handshake (without
+pre-shared key).
+It proves secrecy, authentication, and unique channel identifier
+properties.
+Regarding secrecy, the secrecy of cs_ats_exp (this value corresponds
+to the concatenation of cats, sats, ems in the paper) is proved on 
+the server side, when the server sends ServerFinished,
+before it receives ClientFinished. This property is useful for
+proving security of 0.5RTT messages, by composition with the record
+protocol. The authentication property ClientTerm ==> ServerAccept shows
+that the client uses the same keys, so that implies secrecy on the
+client side as well. *)
+
+
+channel io1, io2, io3, io4, io5, io6, io7, io8, io9, io10,
+	io11, io12, io13, io14, io15, io16, io17, io18, io19, io20,
+	io21, io22, io23, io24, io25, io26, io27, io28, io29, io30,
+	cCorruptS, cCorruptC.
+
+set casesInCorresp = false.
+    (* Distinguishing cases in the proof of correspondences
+       is too slow with the "unique channel id" property,
+       and not necessary *)
+
+proof {
+      crypto uf_cma_corrupt(sign) kseedS;
+      out_game "g1.out" occ;
+      insert 1424 "find j' <= N1 suchthat defined(gx_356[j']) && sgx = gx_356[j'] then";
+      SArename gy_435;
+      out_game "g2.out" occ;
+      insert 51 "find j'' <= N6 suchthat defined(gy_584[j''], sgx[j'']) && gx_356 = sgx[j''] && cgy = gy_584[j''] then";
+      crypto rom(HKDF_extract_ES);
+      remove_assign binder s_370;
+      remove_assign binder s_436;
+      simplify;
+      crypto gdh(exp) "variables: x_355 -> @4_a, y_588 -> @4_b .";
+      crypto prf2 *;
+      crypto client_server_hts *;
+      crypto prf_fin_key_iv *;
+      crypto prf3 *;
+      crypto client_server_ats_exporter_ms *;
+      crypto suf_cma(mac) *; 
+      simplify;
+      success;
+      crypto uf_cma_corrupt(sign) kseedC;
+      success
+}
+
+
+
+type key [large, fixed].
+const zero_key: key.
+type extracted [large, fixed].
+const zero_extracted: extracted. 
+
+type elt [large, bounded].
+fun element2key(elt): key [compos].
+fun elt2bitstring(elt): bitstring [compos].
+
+(* Gap Diffie-Hellman assumption.
+   The considered groups are prime order. *)
+
+proba pGDH.
+expand GDH_prime_order(elt, key, G, exp, mult, pGDH).
+
+letfun dh_keygen() =
+   new x:key;
+   (x,exp(G,x)).
+
+param N, N', N2, N3, N4.
+
+(* HKDF_extract_ES, that is, HKDF_extract with salt argument 
+   Early_secret = HKDF_extract(0,0), is a random oracle. *)
+
+type hashkey [large,fixed].
+
+expand ROM_hash(hashkey, elt, extracted, HKDF_extract_ES).
+
+param qH [noninteractive].
+channel c1, c2.
+let hashoracle = ! qH in(c1, x:elt); out(c2, HKDF_extract_ES(hk,x)). 
+
+(* We use the lemma proved in KeySchedule2.cv *)
+
+type two_keys [large,fixed].
+fun Derive_Secret_cs_hts(extracted,bitstring):two_keys.
+fun HKDF_extract_zero(extracted):extracted.
+
+
+proba Pprf2.
+
+equiv prf2
+       !N3 new k: extracted; (!N O1(log:bitstring) := Derive_Secret_cs_hts(k, log),
+		              O2() := HKDF_extract_zero(k))
+     <=(N3 * Pprf2(time + (N3-1)*(time(HKDF_extract_zero) + N * time(Derive_Secret_cs_hts, maxlength(log))), N))=>
+       !N3 (!N O1(log:bitstring) :=
+	        find[unique] j<=N suchthat defined(log[j],r[j]) && log = log[j] then r[j] 
+		else new r: two_keys; r,
+	    O2() := new r': extracted; r').
+
+fun get_client_hts(two_keys): key.
+fun get_server_hts(two_keys): key.
+
+equiv client_server_hts
+      !N new r: two_keys; (O1() := get_client_hts(r),
+      	    	           O2() := get_server_hts(r))
+    <=(0)=>
+      !N (O1() := new r1: key; r1,
+      	  O2() := new r2: key; r2).
+
+(* We use the lemma proved in KeySchedule3.cv *)
+
+type three_keys [large, fixed].
+fun Derive_Secret_cs_ats_exp(extracted, bitstring): three_keys.
+fun Derive_Secret_rms(extracted, bitstring): key.
+
+proba Pprf3.
+
+equiv prf3
+       !N3 new k: extracted; (!N O1(log:bitstring) := Derive_Secret_cs_ats_exp(k, log),
+		              !N' O2(log': bitstring) := Derive_Secret_rms(k, log'))
+     <=(N3 * Pprf2(time + (N3-1)*(N' * time(Derive_Secret_rms, maxlength(log')) + N * time(Derive_Secret_cs_ats_exp, maxlength(log))), N, N'))=>
+       !N3 (!N O1(log:bitstring) :=
+	        find[unique] j<=N suchthat defined(log[j],r[j]) && log = log[j] then r[j] 
+		else new r: three_keys; r,
+	    !N' O2(log':bitstring) :=
+	        find[unique] j'<=N' suchthat defined(log'[j'],r'[j']) && log' = log'[j'] then r'[j'] 
+		else new r': key; r').      
+
+fun get_client_ats(three_keys): key.
+fun get_server_ats(three_keys): key.
+fun get_exporter_ms(three_keys): key.
+
+equiv client_server_ats_exporter_ms
+      !N new r: three_keys; (O1() := get_client_ats(r),
+      	    	             O2() := get_server_ats(r),
+			     O3() := get_exporter_ms(r))
+    <=(0)=>
+      !N (O1() := new r1: key; r1,
+      	  O2() := new r2: key; r2,
+	  O3() := new r3: key; r3).
+
+(* We use the lemma proved in HKDFexpand.cv *)
+
+fun HKDF_expand_fin_label(key): key.
+fun HKDF_expand_key_label(key): key.
+fun HKDF_expand_iv_label(key): key.
+
+proba Pprf_fin_key_iv.
+
+equiv prf_fin_key_iv
+      !N3 new r: key; (O1() := HKDF_expand_fin_label(r),
+      	      	       O2() := HKDF_expand_key_label(r),
+		       O3() := HKDF_expand_iv_label(r))
+    <=(N3 * Pprf_fin_key_iv(time + (N3-1)*(time(HKDF_expand_fin_label) + time(HKDF_expand_key_label) + time(HKDF_expand_iv_label))))=>
+      !N3 (O1() := new r1: key; r1,
+      	   O2() := new r2: key; r2,
+	   O3() := new r3: key; r3).
+
+(* SUF-CMA MAC
+   The MAC is actually a combination of a hash followed by a MAC.
+   It is easy to see that the combination is SUF-CMA provided the MAC is SUF-CMA 
+   and the hash is collision resistant. *)
+
+proba Pmac.
+expand SUF_CMA_mac_nokgen(key, bitstring, bitstring, mac, check, Pmac).
+
+
+(* UF-CMA signatures
+   I suppose that signatures are probabilistic, and
+   I generate the public key and private key from a common seed
+   (instead of generating the public key from the private key).
+   Verify returns true when the verification succeeds 
+   (instead of returning the message)
+   
+   The signature is actually a combination of a hash and a signature.
+   It is easy to see that the combination is UF-CMA provided the
+   signature is UF-CMA and the hash is collision-resistant.
+
+   If desired, we could also allow different signature algorithms 
+   on the client and server sides.
+ *)
+
+type keyseed [large, bounded].
+type seed [large, bounded].
+type skey [bounded].
+type certificate [bounded].
+
+proba Psign.
+proba Psigncoll.
+expand UF_CMA_signature_key_first(keyseed, certificate, skey, bitstring, bitstring, seed, 
+       		        skgen, pkcert, sign, verify, Psign, Psigncoll).
+
+type nonce [large, fixed].
+
+(* Message formats *)
+
+fun ClientHello(nonce, elt): bitstring [compos].
+fun ServerHelloIn(nonce, elt, bitstring): bitstring [compos].
+fun ServerHelloOut(nonce, elt): bitstring [compos].
+fun ServerCertificateIn(certificate,bitstring): bitstring [compos].
+fun ServerFinishedIn(certificate,bitstring,bitstring,bitstring): bitstring [compos].
+fun ServerCertificateVerifyOut(bitstring): bitstring [compos].
+fun ServerFinishedOut(bitstring): bitstring [compos].
+
+fun ClientCertificateVerifyOut(bitstring): bitstring [compos].
+fun ClientFinishedOut(bitstring): bitstring  [compos].
+fun ClientFinishedIn(bitstring): bitstring  [compos].
+fun ClientFinishedAuthIn(bitstring,certificate,bitstring,bitstring): bitstring  [compos].
+(*
+forall cfin1: bitstring, log2: bitstring, cert: certificate, ccv: bitstring, cfin2: bitstring;
+       ClientFinishedIn(cfin1) <> ClientFinishedAuthIn(log2, cert, ccv, cfin2).
+*)
+(* Logs *)
+
+fun ServerHelloLogInfo(nonce,elt,nonce,elt,bitstring): bitstring [compos].
+fun ServerCertificateLogInfo(bitstring,certificate,bitstring): bitstring [compos].
+fun ServerCertificateVerifyLogInfo(bitstring,bitstring): bitstring [compos].
+fun ServerFinishedLogInfo(bitstring,bitstring): bitstring [compos].
+fun ClientCertificateLogInfo(bitstring, bitstring, certificate): bitstring [compos].
+fun ClientCertificateVerifyLogInfo(bitstring, bitstring): bitstring [compos].
+fun ClientFinishedLogInfo(bitstring, bitstring): bitstring [compos].
+
+(* To make sure that a client MAC with client authentication cannot
+   mixed with a client MAC without client authentication. *)
+
+forall scvl: bitstring, m: bitstring, ccl: bitstring, ccv: bitstring;
+       ServerFinishedLogInfo(scvl, m) <> ClientCertificateVerifyLogInfo(ccl, ccv).
+
+(* Secrecy of the key *)
+
+query secret cs_ats_exp_s.
+
+(* Authentication of the server to the client *)
+
+event ClientTerm(nonce,elt,nonce,elt,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,three_keys).
+event ServerAccept(nonce,elt,nonce,elt,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,three_keys).
+
+query cr: nonce, gx: elt, sr: nonce, gy: elt, log0: bitstring, log1: bitstring, sg: bitstring, m: bitstring,
+      client_hk: key, server_hk: key, client_hiv: key, server_hiv: key, cfk: key, sfk: key, cs_ats_exp: three_keys;
+      event inj:ClientTerm(cr,gx,sr,gy,log0,log1,sg,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp) ==>
+      	    inj:ServerAccept(cr,gx,sr,gy,log0,log1,sg,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp).
+
+(* Correspondence client to server, when the key share of the
+   client is honest *)
+
+event ServerTerm(nonce,elt,nonce,elt,bitstring,certificate,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,three_keys,key).
+event ClientAccept(nonce,elt,nonce,elt,bitstring,certificate,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,three_keys,key).
+
+query cr: nonce, gx: elt, sr: nonce, gy: elt, log0: bitstring, cert: certificate, 
+      log1: bitstring, sg: bitstring, m: bitstring, cfin: bitstring, client_hk: key, server_hk: key,
+      client_hiv: key, server_hiv: key, cfk: key, sfk: key, cs_ats_exp: three_keys,
+      res_secret: key;
+      event inj:ServerTerm(cr,gx,sr,gy,log0,cert,log1,sg,m,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,res_secret) ==>
+      	    inj:ClientAccept(cr,gx,sr,gy,log0,cert,log1,sg,m,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,res_secret).
+
+(* Authentication of the client to the server, when the client authenticates *)
+
+event ServerTermAuth(nonce,elt,nonce,elt,bitstring,certificate,bitstring,bitstring,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,three_keys,key).
+event ClientAcceptAuth(nonce,elt,nonce,elt,bitstring,certificate,bitstring,bitstring,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,three_keys,key).
+
+query cr: nonce, gx: elt, sr: nonce, gy: elt, log0: bitstring, cert: certificate, 
+      log1: bitstring, sg: bitstring, m: bitstring, log2: bitstring, cg: bitstring,
+      cfin: bitstring, client_hk: key, server_hk: key,
+      client_hiv: key, server_hiv: key, cfk: key, sfk: key, cs_ats_exp: three_keys,
+      res_secret: key;
+      event inj:ServerTermAuth(cr,gx,sr,gy,log0,cert,log1,sg,m,log2,cg,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,res_secret) ==>
+      	    inj:ClientAcceptAuth(cr,gx,sr,gy,log0,cert,log1,sg,m,log2,cg,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,res_secret).
+
+(* Unique channel identifier
+   As explained in the paper, we manually prove that 
+   when the cid is the same, sfl (log until ServerFinished)
+   is the same. CryptoVerif proves that the full log and the
+   keys are then the same, by the query below.  *)
+
+event ClientTerm1(bitstring, bitstring, bitstring).
+event ServerTerm1(bitstring, bitstring, bitstring).
+
+query sfl: bitstring, c_cfl: bitstring, s_cfl: bitstring, c_keys: bitstring, s_keys: bitstring;
+      event ClientTerm1(sfl, c_cfl, c_keys) && ServerTerm1(sfl, s_cfl, s_keys) ==>
+      c_cfl = s_cfl && c_keys = s_keys.
+
+letfun send_client_hello() = 
+       new cr:nonce;
+       new x:key;
+       let gx = exp(G,x) in
+       (cr,x,gx).
+
+
+letfun recv_server_hello(hk: hashkey, sil:bitstring, x:key) = 
+  let ServerHelloLogInfo(cr,gx,sr,gy,l) = sil in
+  (let s = exp(gy,x) in
+   let handshakeSecret = HKDF_extract_ES(hk,s) in
+   let cs_hts = Derive_Secret_cs_hts(handshakeSecret,sil) in
+   let client_hts = get_client_hts(cs_hts) in
+   let server_hts = get_server_hts(cs_hts) in
+   let client_hk = HKDF_expand_key_label(client_hts) in
+   let server_hk = HKDF_expand_key_label(server_hts) in
+   let client_hiv = HKDF_expand_iv_label(client_hts) in
+   let server_hiv = HKDF_expand_iv_label(server_hts) in
+   let cfk = HKDF_expand_fin_label(client_hts) in
+   let sfk = HKDF_expand_fin_label(server_hts) in
+   let masterSecret = HKDF_extract_zero(handshakeSecret) in
+   (masterSecret,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,true))
+  else (zero_extracted,zero_key,zero_key,zero_key,zero_key,zero_key,zero_key,false).
+   
+
+letfun recv_server_finished(si:bitstring, masterSecret:extracted, sfk: key,
+       		            cert:certificate, s:bitstring, m:bitstring, 
+			    log1:bitstring) =
+   let scl = ServerCertificateLogInfo(si,cert,log1) in
+   let scvl = ServerCertificateVerifyLogInfo(scl,s) in
+   let sfl = ServerFinishedLogInfo(scvl,m) in
+   let cs_ats_exp = Derive_Secret_cs_ats_exp(masterSecret,sfl) in
+   (cs_ats_exp, verify(cert,scl,s) && mac(sfk,scvl) = m).
+			   
+letfun send_client_certificate_verify(ccl:bitstring, sk:skey) = 
+   new s: seed;
+   sign(sk,ccl,s).
+
+letfun send_client_finished(log:bitstring, cfk:key) = 
+   mac(cfk,log).
+
+letfun get_resumption_secret(masterSecret: extracted, cfl: bitstring) =
+   Derive_Secret_rms(masterSecret, cfl).
+
+letfun recv_client_hello(hk: hashkey, cr:nonce, gx:elt) = 
+   new sr:nonce;
+   new y: key;
+   let gy = exp(G,y) in
+   let s = exp(gx,y) in
+   let handshakeSecret = HKDF_extract_ES(hk,s) in   
+   (sr,gy,handshakeSecret).
+
+letfun onertt_hs_keys(sil:bitstring,handshakeSecret:extracted) = 
+   let cs_hts = Derive_Secret_cs_hts(handshakeSecret,sil) in
+   let client_hts = get_client_hts(cs_hts) in
+   let server_hts = get_server_hts(cs_hts) in
+   let client_hk = HKDF_expand_key_label(client_hts) in
+   let server_hk = HKDF_expand_key_label(server_hts) in
+   let client_hiv = HKDF_expand_iv_label(client_hts) in
+   let server_hiv = HKDF_expand_iv_label(server_hts) in
+   let cfk = HKDF_expand_fin_label(client_hts) in
+   let sfk = HKDF_expand_fin_label(server_hts) in
+   let masterSecret = HKDF_extract_zero(handshakeSecret) in
+   (client_hk, server_hk, client_hiv, server_hiv, cfk, sfk, masterSecret).
+
+letfun send_server_certificate_verify(scl:bitstring,sk:skey) = 
+   new s: seed;
+   sign(sk,scl,s).
+
+letfun send_server_finished(scvl:bitstring,sfk:key) = 
+   mac(sfk,scvl).
+
+letfun onertt_data_keys(masterSecret: extracted, sfl:bitstring) = 
+   Derive_Secret_cs_ats_exp(masterSecret,sfl).
+
+letfun check_client_finished_no_auth(masterSecret: extracted, sfl:bitstring,cfin:bitstring,cfk:key) = 
+   if mac(cfk,sfl) = cfin then
+   (
+       let cfl = ClientFinishedLogInfo(sfl, cfin) in
+       let resumption_secret = Derive_Secret_rms(masterSecret, cfl) in
+       (resumption_secret, true)
+   )
+   else
+       (zero_key, false).
+
+letfun check_client_finished_client_auth(masterSecret: extracted, sfl:bitstring,
+				    log2: bitstring, 
+				    certC:certificate,
+				    ccv:bitstring,cfin:bitstring,
+			    	    cfk:key) = 
+   let ccl = ClientCertificateLogInfo(sfl,log2,certC) in
+   let ccvl = ClientCertificateVerifyLogInfo(ccl,ccv) in
+   if verify(certC,ccl,ccv) && mac(cfk,ccvl) = cfin then
+   (
+      let cfl = ClientFinishedLogInfo(ccvl, cfin) in
+      let resumption_secret = Derive_Secret_rms(masterSecret, cfl) in   
+      (resumption_secret, true)
+   )
+   else
+      (zero_key, false).
+
+
+param N1,N5,N6,
+      N7,N8,N9,N10,N11,N12,
+      N13,N14,N15,N16.
+
+let Client = 
+!N1
+    in(io1,());
+    let (cr:nonce,x:key,cgx:elt) = send_client_hello() in
+    (* for 0-rtt  insert clientEphemeralKeys(cr,x,cgx); *)
+    out(io2,ClientHello(cr,cgx));
+    in(io3,ServerHelloIn(sr,cgy,log0));
+    let sil = ServerHelloLogInfo(cr,cgx,sr,cgy,log0) in
+    let (masterSecret:extracted,client_hk:key,server_hk:key,client_hiv:key,server_hiv:key,cfk:key,sfk:key,=true) = recv_server_hello(hk,sil,x) in
+    out(io4,(client_hk, server_hk, client_hiv, server_hiv));
+    in(io5,(ServerFinishedIn(certS,scv,m,log1), ClientAuth: bool, log2: bitstring)); 
+    let (cs_ats_exp: three_keys,=true) = recv_server_finished(sil,masterSecret,sfk,certS,scv,m,log1) in   
+    let scl = ServerCertificateLogInfo(sil,certS,log1) in
+    let scvl = ServerCertificateVerifyLogInfo(scl,scv) in
+    let c_sfl : bitstring = ServerFinishedLogInfo(scvl,m) in
+    if ClientAuth then
+    (
+        let certC = pkC in
+        let ccl = ClientCertificateLogInfo(c_sfl,log2,certC) in
+        let ccv = send_client_certificate_verify(ccl,skC) in
+        let ccvl = ClientCertificateVerifyLogInfo(ccl,ccv) in
+        let cfin = send_client_finished(ccvl,cfk) in
+	let c_cfl: bitstring = ClientFinishedLogInfo(ccvl, cfin) in
+	let resumption_secret = get_resumption_secret(masterSecret, c_cfl) in
+    	event ClientAcceptAuth(cr,cgx,sr,cgy,log0,certS,log1,scv,m,log2,ccv,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,resumption_secret);
+	event ClientTerm1((cr,cgx,sr,cgy,log0,certS,log1,scv,m),(log2,certC,ccv,cfin),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,resumption_secret));
+	if defined(corruptedServer) then
+    	   out(io6,(ClientCertificateVerifyOut(ccv),ClientFinishedOut(cfin)));
+       	   in(io7,());
+	   find j2 <= N6 suchthat defined(s_sfl[j2]) && c_sfl = s_sfl[j2] then
+	      	 (* The server has the same cs_ats_exp in session j2. 
+		    The secrecy is proved at the server. *)
+       	      out(io8, resumption_secret)
+           else
+	      out(io8, (resumption_secret, cs_ats_exp))
+        else
+    	   out(io6,(ClientCertificateVerifyOut(ccv),ClientFinishedOut(cfin)));
+       	   in(io7,());
+       	   if certS = pkS then
+	   (
+              (* The client is talking to the honest server.
+              	  Secrecy of the key can be checked on the server side. *)
+              event ClientTerm(cr,cgx,sr,cgy,log0,log1,scv,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp);
+              out(io8, resumption_secret)
+	   )
+           else 
+              out(io8, (resumption_secret, cs_ats_exp))
+    )
+    else
+        let cfin = send_client_finished(c_sfl,cfk) in
+	let cfl = ClientFinishedLogInfo(c_sfl, cfin) in
+	let resumption_secret = get_resumption_secret(masterSecret, cfl) in
+    	event ClientAccept(cr,cgx,sr,cgy,log0,certS,log1,scv,m,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,resumption_secret);
+	event ClientTerm1((cr,cgx,sr,cgy,log0,certS,log1,scv,m),cfin,(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,resumption_secret));
+    	if defined(corruptedServer) then 
+       	   out(io6,ClientFinishedOut(cfin));
+       	   in(io7,());
+	   find j2 <= N6 suchthat defined(s_sfl[j2]) && c_sfl = s_sfl[j2] then
+	      	 (* The server has the same cs_ats_exp in session j2. 
+		    The secrecy is proved at the server. *)
+       	      out(io8, resumption_secret)
+           else
+	      out(io8, (resumption_secret, cs_ats_exp))
+        else 
+           out(io6,ClientFinishedOut(cfin));
+       	   in(io7,());
+       	   if certS = pkS then
+	   (
+               (* The client is talking to the honest server.
+               	  Secrecy can be checked on the server side. *)
+              event ClientTerm(cr,cgx,sr,cgy,log0,log1,scv,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp);
+              out(io8, resumption_secret)
+	   )
+           else 
+              out(io8, (resumption_secret, cs_ats_exp)).
+
+
+let Server = 
+ !N6
+   in(io9,ClientHello(cr,sgx));
+   let (sr:nonce,sgy:elt,handshakeSecret:extracted) = recv_client_hello(hk,cr,sgx) in
+   out(io10,ServerHelloOut(sr,sgy));
+   in(io11,log0:bitstring);
+   let sil = ServerHelloLogInfo(cr,sgx,sr,sgy,log0) in
+   let (client_hk:key, server_hk: key, client_hiv: key, server_hiv: key, cfk: key, sfk: key, masterSecret: extracted) = onertt_hs_keys(sil,handshakeSecret) in
+   out(io12,(client_hk, server_hk, client_hiv, server_hiv));
+   in(io13,log1:bitstring);
+   (* The server is the honest server -- but the client can talk to other servers *)
+   let certS = pkS in
+   let scl = ServerCertificateLogInfo(sil,certS,log1) in
+   let scv = send_server_certificate_verify(scl,skS) in
+   let scvl = ServerCertificateVerifyLogInfo(scl,scv) in
+   let m = send_server_finished(scvl,sfk) in
+   let s_sfl: bitstring = ServerFinishedLogInfo(scvl,m) in
+   let cs_ats_exp = onertt_data_keys(masterSecret,s_sfl) in
+   event ServerAccept(cr,sgx,sr,sgy,log0,log1,scv,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp);
+   out(io18,(ServerCertificateVerifyOut(scv), ServerFinishedOut(m)));
+   (* test for secrecy of 0.5RTT key *)
+   ((
+   in(io22, ());
+   find j <= N1 suchthat defined(cgx[j]) && sgx = cgx[j] then
+   (
+      let cs_ats_exp_s: three_keys = cs_ats_exp
+   )
+   else
+      out(io23, cs_ats_exp)
+   )
+   |
+   in(io19,clientfinished: bitstring);
+   let ClientFinishedAuthIn(log2, certC, ccv, cfin) = clientfinished in
+   (
+       let (resumption_secret: key, =true) = check_client_finished_client_auth(masterSecret,s_sfl,log2,certC,ccv,cfin,cfk) in
+       let ccl = ClientCertificateLogInfo(s_sfl,log2,certC) in
+       let ccvl = ClientCertificateVerifyLogInfo(ccl,ccv) in
+       let s_cfl = ClientFinishedLogInfo(ccvl, cfin) in
+       event ServerTerm1((cr,sgx,sr,sgy,log0,certS,log1,scv,m),(log2,certC,ccv,cfin),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,resumption_secret));
+       if certC = pkC then
+       (
+	   if defined(corruptedClient) then
+	      out(io30, resumption_secret)
+	   else 	   
+	      event ServerTermAuth(cr,sgx,sr,sgy,log0,certS,log1,scv,m,log2,ccv,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,resumption_secret);
+	      out(io30, resumption_secret)	      
+       )
+       else
+           out(io30, (resumption_secret, cs_ats_exp))
+   )
+   else let ClientFinishedIn(cfin) = clientfinished in
+       let (resumption_secret: key, =true) = check_client_finished_no_auth(masterSecret,s_sfl,cfin,cfk) in
+       event ServerTerm1((cr,sgx,sr,sgy,log0,certS,log1,scv,m),cfin,(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,resumption_secret));
+       find j <= N1 suchthat defined(cgx[j]) && sgx = cgx[j] then
+       (
+	   event ServerTerm(cr,sgx,sr,sgy,log0,certS,log1,scv,m,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cs_ats_exp,resumption_secret);
+	   out(io30, resumption_secret)
+       )
+       else
+           out(io30, (resumption_secret, cs_ats_exp))).
+
+(* Corruption for forward secrecy *)
+
+let corruptS = 
+  in(cCorruptS, ()); 
+  let corruptedServer:bool = true in
+  out(cCorruptS, skS).
+
+let corruptC = 
+  in(cCorruptC, ()); 
+  let corruptedClient:bool = true in
+  out(cCorruptC, skC).
+
+   
+
+
+process 
+  in(io20,());
+  new hk: hashkey; (* Key that models the choice of the random oracle *)
+  new kseedS:keyseed;
+  let skS = skgen(kseedS) in
+  let pkS = pkcert(kseedS) in
+  new kseedC:keyseed;
+  let skC = skgen(kseedC) in
+  let pkC = pkcert(kseedC) in
+  out(io21,(pkS, pkC));
+  (Client | Server | corruptS | corruptC | hashoracle)

@@ -1,0 +1,144 @@
+(* This file proves properties of the record protocol,
+assuming the client and server initially share a random
+traffic secret. *)
+
+
+type key [fixed, large].
+type seqn [fixed].
+type nonce_t [fixed, large].
+
+param N, Nk, Ne, Nd, Ns, Nr.
+
+(* We use the lemma proved in HKDFexpand.cv *)
+
+fun HKDF_expand_upd_label(key): key.
+fun HKDF_expand_key_label(key): key.
+fun HKDF_expand_iv_label(key): key.
+
+proba Pprf_upd_key_iv.
+
+equiv prf_upd_key_iv
+      !N new r: key; (O1() := HKDF_expand_upd_label(r),
+      	      	      O2() := HKDF_expand_key_label(r),
+		      O3() := HKDF_expand_iv_label(r))
+    <=(N * Pprf_upd_key_iv(time + (N-1)*(time(HKDF_expand_upd_label) + time(HKDF_expand_key_label) + time(HKDF_expand_iv_label))))=>
+      !N (O1() := new r1: key; r1,
+      	  O2() := new r2: key; r2,
+	  O3() := new r3: key; r3).
+
+(* Injectivity of xor *)
+
+fun xor(key, seqn): nonce_t.
+
+forall k: key, n: seqn, n': seqn;
+       (xor(k, n) = xor(k,n')) = (n = n').
+
+(* AEAD *)
+
+fun AEAD_encrypt(key, nonce_t, bitstring): bitstring.
+fun AEAD_decrypt(key, nonce_t, bitstring): bitstringbot.
+
+(* encryption is IND-CPA and INT-CTXT provided the nonce is distinct
+   for each encryption *)
+
+(* Z(x) is a bitstring of the same length as x, containing only zeroes *)
+fun Z(bitstring): bitstring.
+
+(* injbot is the natural injection from bitstring to bitstring union bottom *)
+fun injbot(bitstring):bitstringbot [compos].
+forall x:bitstring; injbot(x) <> bottom.
+
+forall k: key, nonce: nonce_t, msg: bitstring;
+      AEAD_decrypt(k, nonce, AEAD_encrypt(k, nonce, msg)) = injbot(msg).
+
+fun AEAD_encrypt'(key, nonce_t, bitstring): bitstring.
+
+proba Penc.
+event repeated_nonce.
+
+equiv 
+      !Nk new k: key; (!Ne Oenc(nonce_e: nonce_t, msg: bitstring) := AEAD_encrypt(k, nonce_e, msg),
+      	               !Nd Odec(nonce_d: nonce_t, cip: bitstring) := AEAD_decrypt(k, nonce_d, cip))
+<=(Nk * Penc(time + (Nk-1)*(Ne*time(AEAD_encrypt, maxlength(msg)) + Ne*time(Z, maxlength(msg)) +
+      		            Nd*time(AEAD_decrypt, maxlength(cip))), Ne, Nd, maxlength(msg), maxlength(cip)))=>
+      !Nk new k: key;
+         (!Ne Oenc(nonce_e: nonce_t, msg: bitstring) := 
+      	      find i <= Ne suchthat defined(nonce_e[i],r[i]) && nonce_e = nonce_e[i] then
+	      	  event_abort repeated_nonce
+	      else
+		  let r: bitstring = AEAD_encrypt'(k, nonce_e, Z(msg)) in
+	          r,
+	  !Nd Odec(nonce_d: nonce_t, cip: bitstring) :=
+	      find j <= Ne suchthat defined(msg[j], nonce_e[j], r[j]) && nonce_d = nonce_e[j] && cip = r[j] then
+		  injbot(msg[j])
+	      else
+	          bottom).
+
+(* Test function *)
+
+fun test(bool, bitstring, bitstring): bitstring.
+forall x:bitstring,y:bitstring; test(true,x,y) = x.
+forall x:bitstring,y:bitstring; test(false,x,y) = y.
+forall b:bool,x:bitstring; test(b,x,x) = x.
+
+forall b:bool,x:bitstring,y:bitstring; 
+       Z(test(b, x, y)) = test(b, Z(x), Z(y)).
+
+(* Tables used to record previously used sequence numbers,
+   to avoid reusing them *)
+
+table table_count_send(seqn).
+table table_count_recv(seqn).
+
+(* Secrecy of plaintexts *)
+
+query secret b public_vars traffic_secret_Nplus1.
+
+(* Message authenticity *)
+
+event sent(seqn, bitstring).
+event received(seqn, bitstring).
+
+query count: seqn, msg: bitstring;
+      event inj:received(count, msg) ==> inj:sent(count, msg).
+
+(* Secrecy of updated key *)
+
+query secret traffic_secret_Nplus1 public_vars b.
+
+channel io1, io2, io3, io4, io5, io6, io7, io8.
+
+let send =
+    !Ns
+    in(io5, (clear1: bitstring, clear2: bitstring, count: seqn));
+    (* Make sure that count has not been used before *)
+    get table_count_send(=count) in yield else
+    insert table_count_send(count);
+    (* The two candidate plaintexts must have the same (padded) length *)
+    if Z(clear1) = Z(clear2) then
+    let clear = test(b, clear1, clear2) in
+    event sent(count, clear);
+    let nonce = xor(iv, count) in
+    let cipher = AEAD_encrypt(k, nonce, clear) in
+    out(io6, cipher).
+
+let receive =
+    !Nr
+    in(io7, (cipher: bitstring, count: seqn));
+    (* Make sure that count has not been used before *)
+    get table_count_recv(=count) in yield else
+    insert table_count_recv(count);
+    let nonce = xor(iv, count) in
+    let injbot(clear) = AEAD_decrypt(k, nonce, cipher) in
+    event received(count, clear).    
+    
+
+process
+	in(io1, ());
+	new b: bool;
+	new traffic_secret_N: key;
+	let traffic_secret_Nplus1: key = HKDF_expand_upd_label(traffic_secret_N) in
+	let k = HKDF_expand_key_label(traffic_secret_N) in
+	let iv = HKDF_expand_iv_label(traffic_secret_N) in
+	out(io2, ());
+	(send | receive)

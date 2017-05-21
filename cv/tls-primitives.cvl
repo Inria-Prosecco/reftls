@@ -1,0 +1,102 @@
+(* SUF-CMA MAC *)
+
+define SUF_CMA_mac_nokgen(mkey, macinput, macres, mac, check, Pmac) {
+
+fun mac(mkey, macinput):macres.
+fun check(mkey, macinput, macres): bool.
+
+fun mac2(mkey, macinput):macres.
+
+forall m:macinput, k:mkey;
+	check(k, m, mac(k, m)).
+
+forall m:macinput, k:mkey, m':macres;
+	(mac(k,m) = m') = check(k, m, m').
+
+param N, N2, N3.
+
+equiv suf_cma(mac)
+      ! N3 new k: mkey;(
+	 !N Omac(x: macinput) := mac(k, x),
+	 !N2 Ocheck(m: macinput, ma: macres) := check(k, m, ma))
+     <=(N3 * Pmac(time + (N3-1)*(N*time(mac,maxlength(x)) + N2*time(check,maxlength(m),maxlength(ma))), N, N2, max(maxlength(x), maxlength(m))))=> [computational]
+      ! N3 new k: mkey [unchanged];(
+	 !N Omac(x: macinput) := let ma2:macres = mac2(k, x) in ma2,
+	 !N2 Ocheck(m: macinput, ma: macres) := 
+	    find j <= N suchthat defined(x[j], ma2[j]) && (m = x[j]) && ma = ma2[j] then true else false).
+
+}
+
+(* UF-CMA signatures *)
+
+define UF_CMA_signature_key_first(keyseed, pkey, skey, signinput, signature, seed, skgen, pkgen, sign, check, Psign, Psigncoll) {
+
+const mark: bitstring.
+
+fun sign(skey, signinput, seed): signature.
+fun skgen(keyseed):skey.
+fun pkgen(keyseed):pkey.
+fun check(pkey, signinput, signature): bool.
+
+fun sign2(skey, signinput, seed): signature.
+fun skgen2(keyseed):skey.
+fun pkgen2(keyseed):pkey.
+fun check2(pkey, signinput, signature): bool.
+
+forall m:signinput, r:keyseed, r2:seed; 
+	check(pkgen(r), m, sign(skgen(r), m, r2)) = true.
+forall m:signinput, r:keyseed, r2:seed; 
+	check2(pkgen2(r), m, sign2(skgen2(r), m, r2)) = true.
+
+param N, N2, N3, N4.
+
+equiv uf_cma(sign)
+       !N3 new r: keyseed; (Opk() [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) := sign(skgen(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) := check(pkgen(r), m1, si1)),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(y, m, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m1), maxlength(m)), max(maxlength(si1), maxlength(si))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign2(skgen2(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check2(pkgen2(r), m1, si1) then true else false),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k]) && y = pkgen2(r[k]) && m = x[j,k] && check2(y, m, si) then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(y,m,si).
+
+equiv uf_cma_corrupt(sign)
+       !N3 new r: keyseed; (Opk() [useful_change] [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) [useful_change] := sign(skgen(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) [useful_change] := check(pkgen(r), m1, si1),
+			    Ocorrupt() [10] := r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(y, m, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m1), maxlength(m)), max(maxlength(si1), maxlength(si))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [manual,computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign2(skgen2(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+			      if defined(corrupt) then check2(pkgen2(r), m1, si1) else
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check2(pkgen2(r), m1, si1) then true else false,
+			    Ocorrupt() := let corrupt: bitstring = mark in r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find k <= N3 suchthat defined(r[k],corrupt[k]) && y = pkgen2(r[k]) then check2(y, m, si) else
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k]) && y = pkgen2(r[k]) && m = x[j,k] && check2(y, m, si) then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(y,m,si).
+
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen2(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen2(r1) = skgen2(r2) <=(Psigncoll)=> false.
+
+}

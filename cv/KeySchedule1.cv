@@ -1,0 +1,155 @@
+(* This file proves that, when the early secret es 
+   is a fresh random value, 
+  e -> HKDFextract(es,e) and
+  log_1 -> derive-secret(es, client_ets, log_1)
+        || derive-secret(es, eems, log_1)
+  are indistinguishable from independent random functions, and
+  k^b = derive-secret(es, psk_binder_key, "") and
+  HKDFextract(es,0)
+  are indistinguishable from independent fresh random values 
+  independent from these random functions.
+  In the paper, we ignore the early exporter master secret
+  (label eems) so we just consider 
+  log_1 -> derive-secret(es, client_ets, log_1)
+  instead of 
+  log_1 -> derive-secret(es, client_ets, log_1)
+        || derive-secret(es, eems, log_1)  *)
+
+(* Proof indications *)
+
+proof {
+      auto;
+      SArename r2_95;
+      auto
+      }
+
+
+type extracted [large, fixed].
+type key [large, fixed].
+type two_keys [large, fixed].
+type label.
+
+(* HMAC is a PRF *)
+
+fun HMAC(extracted, bitstring):key.
+
+proba Pprf.
+
+param N, N3.
+
+equiv prf(HMAC)
+       !N3 new r: extracted; !N O(x:bitstring) := HMAC(r,x)
+     <=(N3 * (2/|extracted| + Pprf(time + (N3-1)* N * time(HMAC, maxlength(x)), N, maxlength(x))))=>
+       !N3 !N O(x: bitstring) :=
+	        find[unique] j<=N suchthat defined(x[j],r2[j]) && x = x[j] then r2[j] 
+		else new r2: key; r2.
+
+(* Hash is a collision resistant hash function *)
+
+type hashkey [large,fixed].
+type hash [fixed].
+proba Phash.
+expand CollisionResistant_hash(hashkey, bitstring, hash, Hash, Phash).
+
+(* Derive_secret(Secret, Label, Messages) =
+   HKDF_expand_label(Secret, Label, Hash(Messages), Hash.length) =
+   HKDF_expand(Secret, [Hash.length, "TLS 1.3, " + Label, Hash(Messages)], Hash.length) =
+   HMAC(Secret, [Hash.length, "TLS 1.3, " + Label, Hash(Messages), 0x00])
+
+We define build_arg(Label, Hash) = [Length, "TLS 1.3, " + Label, Hash, 0x00].
+*)
+
+fun build_arg(label, hash): bitstring [compos].
+
+letfun HKDF_expand_label(Secret: extracted, Label: label, HashValue: hash) =
+       HMAC(Secret, build_arg(Label, HashValue)).
+
+letfun Derive_secret(hk: hashkey, Secret: extracted, Label: label, Messages: bitstring) = 
+       HKDF_expand_label(Secret, Label, Hash(hk, Messages)).
+
+letfun HKDF_extract(Salt: extracted, Ikm: bitstring) =
+       HMAC(Salt, Ikm).
+
+fun concat(key, key): two_keys [compos].
+
+equiv concat
+      !N new r1: key; new r2: key; O() := concat(r1, r2)
+      <=(0)=>
+      !N new r: two_keys; O() := r.
+
+(* Labels *)
+
+const client_ets : label. (* ets = early traffic secret *)
+const psk_binder_key : label. (* "external psk binder key" or "resumption psk binder key" *)
+const eems : label. (* eems = early exporter master secret *)
+
+(* Concatenation of client_early_traffic_secret and early_exporter_secret *)
+
+letfun Derive_Secret_cets_eems(hk: hashkey, EarlySecret: extracted, log: bitstring) =
+       concat(Derive_secret(hk, EarlySecret, client_ets, log),
+              Derive_secret(hk, EarlySecret, eems, log)).
+
+(* binder_key *)
+
+const empty_log: bitstring.
+
+letfun Derive_Secret_psk_binder_key(hk: hashkey, EarlySecret: extracted) =
+       Derive_secret(hk, EarlySecret, psk_binder_key, empty_log).
+
+(* Handshake Secret *)
+
+type elt [large, bounded].
+fun elt2bitstring(elt): bitstring [compos].
+
+(* - Version with DHE *)
+letfun HKDF_extract_DHE(EarlySecret: extracted, DHE: elt) =
+       HKDF_extract(EarlySecret, elt2bitstring(DHE)).
+
+(* - Version without DHE *)
+const zero_hash: bitstring.
+
+letfun HKDF_extract_zero(EarlySecret: extracted) =
+       HKDF_extract(EarlySecret, zero_hash).
+
+
+forall l: label, h: hash, e: elt; build_arg(l, h) <> elt2bitstring(e).
+forall l: label, h: hash; build_arg(l, h) <> zero_hash.
+forall e: elt; elt2bitstring(e) <> zero_hash. (* TO DO: check *)
+
+(* Prove equivalence between processLeft and processRight *)
+
+query secret b.
+
+channel start, c1, c2, c3, c4, c5.
+
+param N''.
+
+let processLeft =
+    !N3 in(c1, ()); new es: extracted; out(c1, ());
+    ((!N in(c2, log0: bitstring); out(c2, Derive_Secret_cets_eems(hk, es, log0))) |
+     (in(c3, ()); out(c3, Derive_Secret_psk_binder_key(hk, es))) |
+     (!N'' in(c4, DHE0: elt); out(c4, HKDF_extract_DHE(es, DHE0))) |
+     (in(c5, ()); out(c5, HKDF_extract_zero(es)))).
+
+let processRight =
+    !N3 in(c1, ()); out(c1, ());
+    ((!N in(c2, log: bitstring);
+    	 find[unique] j <= N suchthat defined(log[j], r[j]) && log = log[j] then
+	      out(c2, r[j])
+	 else
+	      new r: two_keys; out(c2, r)) |
+     (in(c3, ()); new r': key; out(c3, r')) |
+     (!N'' in(c4, DHE: elt);
+    	 find[unique] j'' <= N'' suchthat defined(DHE[j''], r''[j'']) && DHE = DHE[j''] then
+	      out(c4, r''[j''])
+	 else
+	      new r'': key; out(c4, r'')) |
+     (in(c5, ()); new r''': key; out(c5, r'''))).
+
+process
+	in(start, ());
+	new b: bool;
+	new hk: hashkey; (* This key models the choice of the collision resistant hash function *)
+	if b then out(start, hk); processLeft
+	     else out(start, hk); processRight
+	     

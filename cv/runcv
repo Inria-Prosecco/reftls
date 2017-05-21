@@ -1,0 +1,25 @@
+#!/bin/bash
+
+TIME=$HOME/dev/cryptoverif/xtime
+CV="$HOME/dev/cryptoverif/cryptoverif -lib tls-lib"
+
+# The argument of analyze is
+# $1 = file name (without .cv)
+
+function analyze()
+{
+echo $1
+$TIME $CV $1.cv > $1.out
+tail -n 2 $1.out
+}
+
+analyze HKDFexpand
+analyze KeySchedule1
+analyze KeySchedule2
+analyze KeySchedule3
+analyze tls13-core-InitialHandshake
+analyze tls13-core-InitialHandshake-1RTTonly
+analyze tls13-core-PSKandPSKDHE-NoCorruption
+analyze tls13-core-RecordProtocol
+analyze tls13-core-RecordProtocol-0RTT
+analyze tls13-core-RecordProtocol-0RTT-badkey

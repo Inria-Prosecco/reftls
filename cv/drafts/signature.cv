@@ -1,0 +1,91 @@
+(* Proving that an UF-CMA signature composed with a collision-resistant hash
+   is an UF-CMA MAC signature.  *)
+
+type keyseed [large, fixed].
+type pkey [bounded].
+type skey [bounded].
+type seed [large, fixed].
+type signature_t [large, fixed].
+type hash.
+
+proof {
+      crypto uf_cma(sign) r_75;
+      remove_assign binder "@6_x_106";
+      remove_assign binder sk_88;
+      remove_assign binder "@6_m1_108";
+      simplify
+}
+(* Initial UF-CMA signature *)
+
+define UF_CMA_signature_allow_repeat(keyseed, pkey, skey, signinput, signature, seed, skgen, pkgen, sign, check, Psign, Psigncoll) {
+
+const mark: bitstring.
+
+fun sign(skey, signinput, seed): signature.
+fun skgen(keyseed):skey.
+fun pkgen(keyseed):pkey.
+fun check(pkey, signinput, signature): bool.
+
+forall m:signinput, r:keyseed, r2:seed; 
+	check(pkgen(r), m, sign(skgen(r), m, r2)) = true.
+
+param N, N2, N3, N4.
+
+equiv uf_cma(sign)
+       !N3 new r: keyseed; (Opk() [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) := sign(skgen(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) := check(pkgen(r), m1, si1))
+     <=(N3 * Psign(time + (N-1) * time(check, maxlength(m1), maxlength(si1)) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign(skgen(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check(pkgen(r), m1, si1) then true else false).
+
+}
+
+proba Psign.
+proba Psigncoll.
+expand UF_CMA_signature_allow_repeat(keyseed, pkey, skey, hash, signature_t, seed, skgen, pkgen, sign, check, Psign, Psigncoll).
+
+(* Hash is a collision resistant hash function *)
+
+type hashkey [large,fixed].
+proba Phash.
+expand CollisionResistant_hash(hashkey, bitstring, hash, Hash, Phash).
+
+(* Define a signature primitive that is the composition of the signature above and Hash *)
+
+letfun sign'(hk: hashkey, sk: skey, m: bitstring, s: seed) = 
+       sign(sk, Hash(hk, m), s).
+
+letfun check'(hk: hashkey, pk: pkey, m: bitstring, si: signature_t) =
+       check(pk, Hash(hk, m), si).
+       
+(* Prove equivalence between processLeft and processRight *)
+
+query secret b.
+
+channel start, c1, c2, c3, c4, c5.
+
+param N, N', N3.
+
+let processLeft = 
+      !N3 in(c1, ()); new r: keyseed; out(c1, ()); (
+         (in(c2, ()); out(c2, pkgen(r))) | 
+	 (!N in(c3, x0: bitstring); new s: seed; out(c3, sign'(hk, skgen(r), x0, s))) |
+	 (!N' in(c4, (m0: bitstring, si0: signature_t)); out(c3, check'(hk, pkgen(r), m0, si0)))).
+
+let processRight = 
+      !N3 in(c1, ()); new r: keyseed;out(c1, ()); (
+         (in(c2, ()); out(c2, pkgen(r))) |
+	 (!N in(c3, x: bitstring); new s: seed; out(c3, sign'(hk, skgen(r), x, s))) |
+	 (!N' in(c4, (m: bitstring, si: signature_t)); 
+	    find j <= N suchthat defined(x[j]) && (m = x[j]) && check'(hk, pkgen(r), m, si) then out(c4,true) else out(c4, false))).
+
+process
+	in(start, ());
+	new b: bool;
+	new hk: hashkey; (* This key models the choice of the collision resistant hash function *)
+	if b then out(start, ()); processLeft
+	     else out(start, ()); processRight

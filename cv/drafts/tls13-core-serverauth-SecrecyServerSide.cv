@@ -1,0 +1,816 @@
+
+channel io1, io2, io3, io4, io5, io6, io7, io8, io9, io10,
+	io11, io12, io13, io14, io15, io16, io17, io18, io19, io20,
+	io21, io22, io23, io24, io25, io26, io27, io28, io29, io30,
+	cCorrupt.
+
+proof {
+      crypto uf_cma_corrupt(sign) kseed;
+      out_game "g1.out" occ;
+      insert 641 "find j' <= N1 suchthat defined(gx_353[j']) && sgx = gx_353[j'] then";
+      SArename gy_416;
+      out_game "g2.out" occ;
+      insert 41 "find j'' <= N6 suchthat defined(gy_533[j''], sgx[j'']) && gx_353 = sgx[j''] && cgy = gy_533[j''] then";
+      crypto rom(HKDF_extract_ES);
+      remove_assign binder s_367;
+      remove_assign binder s_417;
+      simplify;
+      crypto gdh(exp) "variables: x_352 -> @4_a, y_537 -> @4_b .";
+      auto;
+      out_game "g3.out";
+      move binder "@9_ma2_892";
+      SArename "@9_ma2_892";
+      move binder "@9_ma2_926";
+      SArename "@9_ma2_926";
+      success
+}
+
+
+
+type key [large, fixed].
+const zero_key: key.
+type extracted [large, fixed].
+const zero_extracted: extracted. 
+
+type elt [large, bounded].
+fun element2key(elt): key [compos].
+fun elt2bitstring(elt): bitstring [compos].
+
+(* Gap Diffie-Hellman assumption.
+   TO DO are the groups prime order? *)
+
+define GDH_prime_order(G, Z, g, exp, mult, pGDH) {
+
+fun exp(G,Z): G.
+fun exp'(G,Z): G.
+const g:G.
+
+fun mult(Z,Z): Z. 
+equation commut(mult).
+
+(* exponents multiply *)
+
+forall a:G, x:Z, y:Z;
+  exp(exp(a,x), y) = exp(a, mult(x,y)).
+forall a:G, x:Z, y:Z;
+  exp'(exp'(a,x), y) = exp'(a, mult(x,y)).
+
+(* injectivity *)
+
+forall x:Z, y:Z; (exp(g,x) = exp(g,y)) = (x = y).
+forall x:Z, y:Z; (exp'(g,x) = exp'(g,y)) = (x = y).
+
+(* According to http://link.springer.com/chapter/10.1007%2F11745853_14,
+page 214, the order of the base point is a prime
+namely 2^252 + 27742317777372353535851937790883648493.
+So exp(x,y) = exp(x',y) implies y = y' (provided y is not a multiple
+of this prime; if y is a correctly generated secret key, that cannot
+happen)
+-- TO DO check for TLS what groups are used *)
+
+forall x:G, x':G, y:Z; (exp(x,y) = exp(x',y)) = (x = x').
+forall x:G, x':Z, y:Z; (exp(x,y) = exp(g, mult(x',y))) = (x = exp(g,x')).
+
+forall x:G, y:Z, y':Z; (exp(x,y) = exp(x,y')) = (y = y').
+
+(* collision between products *)
+
+collision new x1:Z; new x2:Z; new x3:Z; new x4:Z; 
+  mult(x1,x2) = mult(x3,x4) <=(1/|Z|)=> false. 
+
+collision new x1:Z; new x2:Z; 
+  mult(x1,x1) = mult(x2,x2) <=(1/|Z|)=> false. 
+
+forall x:Z, y:Z, y':Z; 
+  (mult(x,y) = mult(x,y')) = (y = y').
+
+(* replace a random group element with an exponentiation, and conversely *)
+
+param N, N'.
+
+equiv group_to_exp_strict(exp)
+      !N new X:G; (OX() := X, !N' OXm(m:Z) [useful_change] := exp(X,m))
+<=(0)=> [computational]
+      !N new x:Z; (OX() := exp(g,x), !N' OXm(m:Z) := exp(g,mult(x,m))).
+
+(* This equivalence is very general, apply it only manually, because
+   otherwise it might be applied too often.  The equivalence above is
+   particular case applied only when X is inside exp, and good for
+   automatic proofs. *)
+
+equiv group_to_exp(exp)
+      !N new X:G; OX() := X 
+<=(0)=> [manual, computational]    
+      !N new x:Z; OX() := exp(g,x).
+
+
+equiv exp_to_group(exp)
+      !N new x:Z; OX() := exp(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+equiv exp'_to_group(exp)
+      !N new x:Z; OX() := exp'(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+(* the GDH assumption
+    This equivalence says that, when exp(g,a[i]) and exp(g,b[j]) are known to the
+    adversary, the adversary can compute exp(g, mult(a[i], b[j])) only with
+    negligible probability, even in the presence of a DDH oracle
+    DDH(G,A,B,C) tells whether A = G^a, B = G^b, and C = G^{ab} for some a,b,
+    that is DDH(G,A,B,C) is (log_G(A) * log_G(B) = log_G(C)). *) 
+
+const mark: bitstring.
+
+param na, naDDH, naDDH1, naDDH2, naDDH3, naDDH4, naDDH5, naDDH6, naDDH7, naDDH8,
+      nb, nbDDH, nbDDH1, nbDDH2, nbDDH3, nbDDH4, nbDDH5, nbDDH6, nbDDH7, nbDDH8.
+
+equiv gdh(exp)
+    !na new a:Z; (
+      OA() := exp(g,a), 
+      Oa() [3] := a,
+      !naDDH1 ODDHa1(m:G, m':G) := m = exp(m', a),
+      !naDDH2 ODDHa2(m:G,m':G,j<=nb) := exp(m, b[j]) = exp(m',a),
+      !naDDH3 ODDHa3(m:G,m':G,j<=na) := exp(m, a[j]) = exp(m',a),
+      !naDDH4 ODDHa4(m:G,j'<=nb,j<=nb) := exp(m, b[j]) = exp(g,mult(b[j'],a)),
+      !naDDH5 ODDHa5(m:G,j'<=nb,j<=na) := exp(m, a[j]) = exp(g,mult(b[j'],a)),
+      !naDDH6 ODDHa6(m:G,j'<=na,j<=nb) := exp(m, b[j]) = exp(g,mult(a[j'],a)),
+      !naDDH7 ODDHa7(m:G,j'<=na,j<=na) := exp(m, a[j]) = exp(g,mult(a[j'],a)),
+      !naDDH ODDHa(m:G, j<=nb) [useful_change] := m = exp(g, mult(b[j], a)),
+      !naDDH8 ODDHa8(m:G,j<=na) [3] := m = exp(g,mult(a[j], a))
+    ),
+    !nb new b:Z; (
+      OB() := exp(g,b),
+      Ob() [3] := b,
+      !nbDDH1 ODDHb1(m:G, m':G) := m = exp(m', b),
+      !nbDDH2 ODDHb2(m:G,m':G,j<=nb) := exp(m, b[j]) = exp(m',b),
+      !nbDDH3 ODDHb3(m:G,m':G,j<=na) := exp(m, a[j]) = exp(m',b),
+      !nbDDH4 ODDHb4(m:G,j'<=nb,j<=nb) := exp(m, b[j]) = exp(g,mult(b[j'],b)),
+      !nbDDH5 ODDHb5(m:G,j'<=nb,j<=na) := exp(m, a[j]) = exp(g,mult(b[j'],b)),
+      !nbDDH6 ODDHb6(m:G,j'<=na,j<=nb) := exp(m, b[j]) = exp(g,mult(a[j'],b)),
+      !nbDDH7 ODDHb7(m:G,j'<=na,j<=na) := exp(m, a[j]) = exp(g,mult(a[j'],b)),
+      !nbDDH ODDHb(m:G, j<=na) := m = exp(g, mult(a[j], b)),
+      !nbDDH8 ODDHb8(m:G,j<=nb) [3] := m = exp(g,mult(b[j], b))
+    )
+<=((#ODDHa + #ODDHa1 + #ODDHa4 + #ODDHa5 + #ODDHb + #ODDHb1 + #ODDHb6 + #ODDHb7) *
+	   max(1, 7.4*#Oa) * max(1, 7.4*#Ob) *
+	   pGDH(time + (na + nb + #ODDHa + #ODDHa1 + #ODDHb + #ODDHb1) * time(exp),
+	   #ODDHa1 + #ODDHa2 + #ODDHa3 + #ODDHa4 + #ODDHa5 + #ODDHa6 + #ODDHa7 + #ODDHa8 +
+	   #ODDHb1 + #ODDHb2 + #ODDHb3 + #ODDHb4 + #ODDHb5 + #ODDHb6 + #ODDHb7 + #ODDHb8))=> [computational]
+    !na new a:Z [unchanged]; (
+      OA() := exp'(g,a), 
+      Oa() := let ka:bitstring = mark in a,
+      !naDDH1 ODDHa1(m:G, m':G) := if defined(ka) then m = exp'(m', a) else 
+      		  	   find u<=nb suchthat defined(b[u],kb[u]) && m' = exp'(g,b[u]) then m = exp'(m', a) else
+			   find u<=nb suchthat defined(b[u]) && m' = exp'(g,b[u]) then false else
+                               (* by CDH, if neither a nor b[u] are leaked, then m = exp(g, b[u]*a) is impossible *)
+			   m = exp'(m', a)
+			       (* GDH allows to compute m = exp(m',a) for any m and m', without leaking a, 
+			          as it is DDH(g, exp(g,a), m', m) *),
+      !naDDH2 ODDHa2(m:G,m':G,j<=nb) := exp'(m, b[j]) = exp'(m',a),
+      	   (* GDH allows to compute exp(m, b[j]) = exp(m',a) for any m and m', 
+	      without leaking a, as it is DDH(exp(g,a), exp(g,b[j]), m, m')
+	      Indeed, 
+ 	      D(exp(g,a),exp(g,b[j]),m,m') 
+      	        = (log_{g^a}(g^b[j]) * log_{g^a}(m) = log_{g^a}(m'))
+      		= (b[j]/a * log_g(m)/a = log_g(m')/a)
+      		= (b[j] * log_g(m) = a log_g(m'))
+      		= (m^b[j] = m'^a). *)
+      !naDDH3 ODDHa3(m:G,m':G,j<=na) := exp'(m, a[j]) = exp'(m',a),
+      	    (* Similar to ODDHa2 *)
+      !naDDH4 ODDHa4(m:G,j'<=nb,j<=nb) :=
+      	      find u<=nb suchthat defined(kb[u],b[u]) && b[j'] = b[u] then exp'(m, b[j]) = exp'(g,mult(b[j'],a)) else
+	      if defined(ka) then exp'(m, b[j]) = exp'(g,mult(b[j'],a)) else
+      	      b[j] = b[j'] && m = exp'(g,a),
+      !naDDH5 ODDHa5(m:G,j'<=nb,j<=na) :=
+      	      find u<=nb suchthat defined(kb[u],b[u]) && b[j'] = b[u] then exp'(m, a[j]) = exp'(g,mult(b[j'],a)) else
+	      if defined(ka) then exp'(m, a[j]) = exp'(g,mult(b[j'],a)) else
+      	      a[j] = a && m = exp'(g,b[j']),
+      !naDDH6 ODDHa6(m:G,j'<=na,j<=nb) := exp'(m, b[j]) = exp'(g,mult(a[j'],a)),
+      !naDDH7 ODDHa7(m:G,j'<=na,j<=na) := exp'(m, a[j]) = exp'(g,mult(a[j'],a)),
+            (* ODDHa4..7 are particular cases of ODDHa2 or ODDHa3, with m' = exp(g, b[j'])
+	       or m' = exp(g, a[j']).
+	       We need to consider all these forms because CryptoVerif rewrites
+	       exp(exp(g,b[j']),a) into exp(g,mult(b[j'],a)), and it would not
+	       detect exp(g,mult(b[j'],a)) as an instance of exp(m',a). *)
+      !naDDH ODDHa(m:G, j<=nb) :=
+      	     find u<=nb suchthat defined(kb[u],b[u]) && b[j] = b[u] then m = exp'(g, mult(b[j], a)) else 
+             if defined(ka) then m = exp'(g, mult(b[j], a)) else false,
+	    (* ODDHa is a particular case of ODDHa1 in which can apply the CDH assumption,
+	       provided a and b[j] are not leaked. *)
+      !naDDH8 ODDHa8(m:G,j<=na) := m = exp'(g,mult(a[j], a))
+            (* ODDHa8 is a particular case of ODDHa1 in which we do not apply
+	       the CDH assumption, since we apply it between a's and b's *)
+    ),
+    !nb new b:Z [unchanged]; (
+      OB() := exp'(g,b), 
+      Ob() := let kb:bitstring = mark in b,
+      !nbDDH1 ODDHb1(m:G, m':G) := if defined(kb) then m = exp'(m', b) else 
+      		  	   find u<=na suchthat defined(a[u],ka[u]) && m' = exp'(g,a[u]) then m = exp'(m', b) else
+      		  	   find u<=na suchthat defined(a[u]) && m' = exp'(g,a[u]) then false else
+                               (* by CDH, if neither a nor b[u] are leaked, then m = exp(g, a[u]*b) is impossible *)
+			   m = exp'(m', b)
+			       (* GDH allows to compute m = exp(m',a) for any m and m', without leaking a *),
+      !nbDDH2 ODDHb2(m:G,m':G,j<=nb) := exp'(m, b[j]) = exp'(m',b),
+      !nbDDH3 ODDHb3(m:G,m':G,j<=na) := exp'(m, a[j]) = exp'(m',b),
+      !nbDDH4 ODDHb4(m:G,j'<=nb,j<=nb) := exp'(m, b[j]) = exp'(g,mult(b[j'],b)),
+      !nbDDH5 ODDHb5(m:G,j'<=nb,j<=na) := exp'(m, a[j]) = exp'(g,mult(b[j'],b)),
+      !nbDDH6 ODDHb6(m:G,j'<=na,j<=nb) :=
+      	      find u<=na suchthat defined(ka[u],a[u]) && a[j'] = a[u] then exp'(m, b[j]) = exp'(g,mult(a[j'],b)) else
+	      if defined(kb) then exp'(m, b[j]) = exp'(g,mult(a[j'],b)) else
+      	      b[j] = b && m = exp'(g,a[j']),
+      !nbDDH7 ODDHb7(m:G,j'<=na,j<=na) :=
+      	      find u<=na suchthat defined(ka[u],a[u]) && a[j'] = a[u] then exp'(m, a[j]) = exp'(g,mult(a[j'],b)) else
+	      if defined(kb) then exp'(m, a[j]) = exp'(g,mult(a[j'],b)) else
+      	      a[j] = a[j'] && m = exp'(g,b),
+      !nbDDH ODDHb(m:G, j<=na) := find u<=na suchthat defined(ka[u],a[u]) && a[j] = a[u] then m = exp'(g, mult(a[j], b)) else 
+                            if defined(kb) then m = exp'(g, mult(a[j], b)) else false,
+      !nbDDH8 ODDHb8(m:G,j<=nb) := m = exp'(g,mult(b[j], b))
+    ).
+
+    (* We need to consider both forms m = exp(m', a) and m = exp(g,
+    mult(b[j], a)) in the equivalence, because, when m' is known to be
+    exp(g, b[j]), CryptoVerif is going to simplify m = exp(m', a) into
+    m = exp(g, mult(b[j], a)), and the procedure that tests whether a
+    term in the game matches a term in the equivalence would not
+    recognize that m = exp(g, mult(b[j], a)) in the game matches m =
+    exp(m', a) in the equivalence. *)
+
+}
+
+
+proba pGDH.
+expand GDH_prime_order(elt, key, G, exp, mult, pGDH).
+
+letfun dh_keygen() =
+   new x:key;
+   (x,exp(G,x)).
+
+(* Labels for HKDF_expand *)
+
+type label.
+const hk_label:label.
+const client_hts_label:label.
+const server_hts_label:label.
+const fin_label:label.
+const hke_label:label.
+const client_ts_label:label.
+const server_ts_label:label.
+const dk_label:label.
+const dk0_label:label.
+
+param N, N', N2, N3, N4.
+
+(* HKDF_extract_ES, that is, HKDF_extract with salt argument 
+   Early_secret = HKDF_extract(0,0), is a random oracle. *)
+
+type hashkey [large,fixed].
+
+expand ROM_hash(hashkey, elt, extracted, HKDF_extract_ES).
+
+param qH [noninteractive].
+channel c1, c2.
+let hashoracle = ! qH in(c1, x:elt); out(c2, HKDF_extract_ES(hk,x)). 
+
+(* We use the lemma proved in KeySchedule2.cv *)
+
+type two_keys [large,fixed].
+fun Derive_Secret_cs_hts(extracted,bitstring):two_keys.
+fun HKDF_extract_zero(extracted):extracted.
+
+
+proba Pprf2.
+
+equiv prf2
+       !N3 new k: extracted; (!N O1(log:bitstring) := Derive_Secret_cs_hts(k, log),
+		              O2() := HKDF_extract_zero(k))
+     <=(N3 * Pprf2(time + (N3-1)*(time(HKDF_extract_zero) + N * time(Derive_Secret_cs_hts, maxlength(log))), N))=>
+       !N3 (!N O1(log:bitstring) :=
+	        find[unique] j<=N suchthat defined(log[j],r[j]) && log = log[j] then r[j] 
+		else new r: two_keys; r,
+	    O2() := new r': extracted; r').
+
+fun get_client_hts(two_keys): key.
+fun get_server_hts(two_keys): key.
+
+equiv client_server_hts
+      !N new r: two_keys; (O1() := get_client_hts(r),
+      	    	           O2() := get_server_hts(r))
+    <=(0)=>
+      !N (O1() := new r1: key; r1,
+      	  O2() := new r2: key; r2).
+
+(* We use the lemma proved in KeySchedule3.cv *)
+
+type three_keys [large, fixed].
+fun Derive_Secret_cs_ats_exp(extracted, bitstring): three_keys.
+fun Derive_Secret_rms(extracted, bitstring): key.
+
+proba Pprf3.
+
+equiv prf3
+       !N3 new k: extracted; (!N O1(log:bitstring) := Derive_Secret_cs_ats_exp(k, log),
+		              !N' O2(log': bitstring) := Derive_Secret_rms(k, log'))
+     <=(N3 * Pprf2(time + (N3-1)*(N' * time(Derive_Secret_rms, maxlength(log')) + N * time(Derive_Secret_cs_ats_exp, maxlength(log))), N, N'))=>
+       !N3 (!N O1(log:bitstring) :=
+	        find[unique] j<=N suchthat defined(log[j],r[j]) && log = log[j] then r[j] 
+		else new r: three_keys; r,
+	    !N' O2(log':bitstring) :=
+	        find[unique] j'<=N' suchthat defined(log'[j'],r'[j']) && log' = log'[j'] then r'[j'] 
+		else new r': key; r').      
+
+fun get_client_ats(three_keys): key.
+fun get_server_ats(three_keys): key.
+fun get_exporter_ms(three_keys): key.
+
+equiv client_server_ats_exporter_ms
+      !N new r: three_keys; (O1() := get_client_ats(r),
+      	    	             O2() := get_server_ats(r),
+			     O3() := get_exporter_ms(r))
+    <=(0)=>
+      !N (O1() := new r1: key; r1,
+      	  O2() := new r2: key; r2,
+	  O3() := new r3: key; r3).
+
+(* We use the lemma proved in HKDFexpand.cv *)
+
+fun HKDF_expand_fin_label(key): key.
+fun HKDF_expand_key_label(key): key.
+fun HKDF_expand_iv_label(key): key.
+
+proba Pprf_fin_key_iv.
+
+equiv prf_fin_key_iv
+      !N3 new r: key; (O1() := HKDF_expand_fin_label(r),
+      	      	       O2() := HKDF_expand_key_label(r),
+		       O3() := HKDF_expand_iv_label(r))
+    <=(N3 * Pprf_fin_key_iv(time + (N3-1)*(time(HKDF_expand_fin_label) + time(HKDF_expand_key_label) + time(HKDF_expand_iv_label))))=>
+      !N3 (O1() := new r1: key; r1,
+      	   O2() := new r2: key; r2,
+	   O3() := new r3: key; r3).
+
+(* SUF-CMA MAC *)
+
+define SUF_CMA_mac_nokgen(mkey, macinput, macres, mac, check, Pmac) {
+
+fun mac(mkey, macinput):macres.
+fun check(mkey, macinput, macres): bool.
+
+fun mac2(mkey, macinput):macres.
+
+forall m:macinput, k:mkey;
+	check(k, m, mac(k, m)).
+
+forall m:macinput, k:mkey, m':macres;
+	(mac(k,m) = m') = check(k, m, m').
+
+equiv suf_cma(mac)
+      ! N3 new k: mkey;(
+	 !N Omac(x: macinput) := mac(k, x),
+	 !N2 Ocheck(m: macinput, ma: macres) := check(k, m, ma))
+     <=(N3 * Pmac(time + (N3-1)*(N*time(mac,maxlength(x)) + N2*time(check,maxlength(m),maxlength(ma))), N, N2, max(maxlength(x), maxlength(m))))=> [computational]
+      ! N3 new k: mkey [unchanged];(
+	 !N Omac(x: macinput) := let ma2:macres = mac2(k, x) in ma2,
+	 !N2 Ocheck(m: macinput, ma: macres) := 
+	    find j <= N suchthat defined(x[j], ma2[j]) && (m = x[j]) && ma = ma2[j] then true else false).
+
+}
+
+proba Pmac.
+expand SUF_CMA_mac_nokgen(key, bitstring, bitstring, mac, check, Pmac).
+
+fun enc(key,bitstring): bitstring.
+fun dec(key,bitstring): bitstring.
+forall k:key, m:bitstring;
+    dec(k,enc(k,m)) = m.
+
+type certificate [bounded].
+const anon_cert:certificate.
+
+(* UF-CMA signatures
+   I suppose that signatures are probabilistic, and
+   I generate the public key and private key from a common seed
+   (instead of generating the public key from the private key).
+   Verify returns true when the verification succeeds 
+   (instead of returning the message) *)
+
+define UF_CMA_signature_key_first(keyseed, pkey, skey, signinput, signature, seed, skgen, pkgen, sign, check, Psign, Psigncoll) {
+
+const mark: bitstring.
+
+fun sign(skey, signinput, seed): signature.
+fun skgen(keyseed):skey.
+fun pkgen(keyseed):pkey.
+fun check(pkey, signinput, signature): bool.
+
+fun sign2(skey, signinput, seed): signature.
+fun skgen2(keyseed):skey.
+fun pkgen2(keyseed):pkey.
+fun check2(pkey, signinput, signature): bool.
+
+forall m:signinput, r:keyseed, r2:seed; 
+	check(pkgen(r), m, sign(skgen(r), m, r2)) = true.
+forall m:signinput, r:keyseed, r2:seed; 
+	check2(pkgen2(r), m, sign2(skgen2(r), m, r2)) = true.
+
+equiv uf_cma(sign)
+       !N3 new r: keyseed; (Opk() [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) := sign(skgen(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) := check(pkgen(r), m1, si1)),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(y, m, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m1), maxlength(m)), max(maxlength(si1), maxlength(si))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign2(skgen2(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check2(pkgen2(r), m1, si1) then true else false),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k]) && y = pkgen2(r[k]) && m = x[j,k] && check2(y, m, si) then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(y,m,si).
+
+equiv uf_cma_corrupt(sign)
+       !N3 new r: keyseed; (Opk() [useful_change] [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) [useful_change] := sign(skgen(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) [useful_change] := check(pkgen(r), m1, si1),
+			    Ocorrupt() [10] := r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(y, m, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m1), maxlength(m)), max(maxlength(si1), maxlength(si))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [manual,computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign2(skgen2(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+			      if defined(corrupt) then check2(pkgen2(r), m1, si1) else
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check2(pkgen2(r), m1, si1) then true else false,
+			    Ocorrupt() := let corrupt: bitstring = mark in r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find k <= N3 suchthat defined(r[k],corrupt[k]) && y = pkgen2(r[k]) then check2(y, m, si) else
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k]) && y = pkgen2(r[k]) && m = x[j,k] && check2(y, m, si) then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(y,m,si).
+
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen2(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen2(r1) = skgen2(r2) <=(Psigncoll)=> false.
+
+}
+
+type keyseed [large, bounded].
+type seed [large, bounded].
+type skey [bounded].
+proba Psign.
+proba Psigncoll.
+expand UF_CMA_signature_key_first(keyseed, certificate, skey, bitstring, bitstring, seed, 
+       		        skgen, pkcert, sign, verify, Psign, Psigncoll).
+
+type nonce [large, fixed].
+
+(* Message formats *)
+
+fun ClientHello(nonce, elt): bitstring [compos].
+fun ServerHelloIn(nonce, elt, bitstring): bitstring [compos].
+fun ServerHelloOut(nonce, elt): bitstring [compos].
+fun ServerCertificateIn(certificate,bitstring): bitstring [compos].
+fun ServerFinishedIn(certificate,bitstring,bitstring,bitstring): bitstring [compos].
+fun ServerCertificateVerifyOut(bitstring): bitstring [compos].
+fun ServerFinishedOut(bitstring): bitstring [compos].
+
+fun ClientCertificateVerifyOut(bitstring): bitstring [compos].
+fun ClientFinishedOut(bitstring): bitstring  [compos].
+fun ClientFinishedIn(bitstring): bitstring  [compos].
+fun ClientFinishedAuthIn(certificate,bitstring,bitstring,bitstring,bitstring): bitstring  [compos].
+
+(* Logs *)
+
+fun ServerHelloLogInfo(nonce,elt,nonce,elt,bitstring): bitstring [compos].
+fun ServerCertificateLogInfo(bitstring,certificate,bitstring): bitstring [compos].
+fun ServerCertificateVerifyLogInfo(bitstring,bitstring): bitstring [compos].
+fun ServerFinishedLogInfo(bitstring,bitstring): bitstring [compos].
+
+(* Secrecy of the key *)
+
+query secret client_ts0_secret_c.
+query secret server_ts0_secret_c.
+query secret client_ts0_secret_s.
+query secret server_ts0_secret_s.
+
+(* Authentication of the server to the client *)
+
+event ClientTerm(nonce,elt,nonce,elt,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,key,key).
+event ServerAccept(nonce,elt,nonce,elt,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,key,key).
+
+query cr: nonce, gx: elt, sr: nonce, gy: elt, log0: bitstring, log1: bitstring, sg: bitstring, m: bitstring,
+      client_hk: key, server_hk: key, client_hiv: key, server_hiv: key, cfk: key, sfk: key, client_ts0: key, server_ts0: key;
+      event inj:ClientTerm(cr,gx,sr,gy,log0,log1,sg,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,client_ts0,server_ts0) ==>
+      	    inj:ServerAccept(cr,gx,sr,gy,log0,log1,sg,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,client_ts0,server_ts0).
+
+(* Correspondence client to server, when the key share of the
+   client is honest *)
+
+event ServerTerm(nonce,elt,nonce,elt,bitstring,certificate,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,key,key).
+event ClientAccept(nonce,elt,nonce,elt,bitstring,certificate,bitstring,bitstring,bitstring,bitstring,key,key,key,key,key,key,key,key).
+
+query cr: nonce, gx: elt, sr: nonce, gy: elt, log0: bitstring, cert: certificate, 
+      log1: bitstring, sg: bitstring, m: bitstring, cfin: bitstring, client_hk: key, server_hk: key,
+      client_hiv: key, server_hiv: key, cfk: key, sfk: key, client_ts0: key, server_ts0: key;
+      event inj:ServerTerm(cr,gx,sr,gy,log0,cert,log1,sg,m,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,client_ts0,server_ts0) ==>
+      	    inj:ClientAccept(cr,gx,sr,gy,log0,cert,log1,sg,m,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,client_ts0,server_ts0).
+
+
+
+letfun send_client_hello() = 
+       new cr:nonce;
+       new x:key;
+       let gx = exp(G,x) in
+       (cr,x,gx).
+
+
+letfun recv_server_hello(hk: hashkey, sil:bitstring, x:key) = 
+  let ServerHelloLogInfo(cr,gx,sr,gy,l) = sil in
+  (let s = exp(gy,x) in
+   let handshakeSecret = HKDF_extract_ES(hk,s) in
+   let cs_hts = Derive_Secret_cs_hts(handshakeSecret,sil) in
+   let client_hts = get_client_hts(cs_hts) in
+   let server_hts = get_server_hts(cs_hts) in
+   let client_hk = HKDF_expand_key_label(client_hts) in
+   let server_hk = HKDF_expand_key_label(server_hts) in
+   let client_hiv = HKDF_expand_iv_label(client_hts) in
+   let server_hiv = HKDF_expand_iv_label(server_hts) in
+   let cfk = HKDF_expand_fin_label(client_hts) in
+   let sfk = HKDF_expand_fin_label(server_hts) in
+   let masterSecret = HKDF_extract_zero(handshakeSecret) in
+   (masterSecret,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,true))
+  else (zero_extracted,zero_key,zero_key,zero_key,zero_key,zero_key,zero_key,false).
+   
+
+letfun recv_server_finished(si:bitstring, masterSecret:extracted, sfk: key,
+       		            cert:certificate, s:bitstring, m:bitstring, 
+			    log1:bitstring) =
+   let scl = ServerCertificateLogInfo(si,cert,log1) in
+   let scvl = ServerCertificateVerifyLogInfo(scl,s) in
+   let sfl = ServerFinishedLogInfo(scvl,m) in
+   let cs_ats_exp = Derive_Secret_cs_ats_exp(masterSecret,sfl) in
+   let client_ts0 = get_client_ats(cs_ats_exp) in
+   let server_ts0 = get_server_ats(cs_ats_exp) in
+   if verify(cert,scl,s) &&
+      mac(sfk,scvl) = m then
+       (client_ts0,server_ts0,true)
+   else (client_ts0,server_ts0,false).
+			   
+letfun send_client_finished_no_auth(sfl:bitstring, cfk:key) = 
+       mac(cfk,sfl).
+(*
+letfun send_client_certificate_verify(ccl:clientCertificateLogInfo, sk:skey, log:bitstring) = 
+   new s: seed;
+   let sg = sign(sk,log,s) in
+   if getClientCertificateLogInfo(log) = ccl then
+        (sg,true)
+   else (sg,false).
+
+letfun send_client_finished_client_auth(ccvl:clientCertificateVerifyLogInfo, cfk:key, log3: bitstring) = 
+   let cfin = mac(cfk,log3) in			    
+   if getClientCertificateVerifyLogInfo(log3) = ccvl then
+        (cfin,true)
+   else (cfin,false).
+*)
+
+letfun recv_client_hello(hk: hashkey, cr:nonce, gx:elt) = 
+   new sr:nonce;
+   new y: key;
+   let gy = exp(G,y) in
+   let s = exp(gx,y) in
+   let handshakeSecret = HKDF_extract_ES(hk,s) in   
+   (sr,gy,handshakeSecret).
+
+letfun onertt_hs_keys(sil:bitstring,handshakeSecret:extracted) = 
+   let cs_hts = Derive_Secret_cs_hts(handshakeSecret,sil) in
+   let client_hts = get_client_hts(cs_hts) in
+   let server_hts = get_server_hts(cs_hts) in
+   let client_hk = HKDF_expand_key_label(client_hts) in
+   let server_hk = HKDF_expand_key_label(server_hts) in
+   let client_hiv = HKDF_expand_iv_label(client_hts) in
+   let server_hiv = HKDF_expand_iv_label(server_hts) in
+   let cfk = HKDF_expand_fin_label(client_hts) in
+   let sfk = HKDF_expand_fin_label(server_hts) in
+   let masterSecret = HKDF_extract_zero(handshakeSecret) in
+   (client_hk, server_hk, client_hiv, server_hiv, cfk, sfk, masterSecret).
+
+letfun send_server_certificate_verify(scl:bitstring,sk:skey) = 
+   new s: seed;
+   sign(sk,scl,s).
+
+letfun send_server_finished(scvl:bitstring,sfk:key) = 
+   mac(sfk,scvl).
+
+letfun onertt_data_keys(masterSecret: extracted, sfl:bitstring) = 
+   let cs_ats_exp = Derive_Secret_cs_ats_exp(masterSecret,sfl) in
+   let client_ts0 = get_client_ats(cs_ats_exp) in
+   let server_ts0 = get_server_ats(cs_ats_exp) in
+   (client_ts0, server_ts0).
+
+letfun check_client_finished_no_auth(sfl:bitstring,cfin:bitstring,cfk:key) = 
+   if mac(cfk,sfl) = cfin then
+      true
+   else false.
+
+(*
+letfun check_client_finished_client_auth(sfl:serverFinishedLogInfo, 
+				    certC:certificate,
+				    cv:bitstring,cfin:bitstring,
+			    	    cfk:key,log1:bitstring,log2:bitstring) = 
+   let ccl = ClientCertificateLogInfo(sfl,certC) in
+   let ccvl = ClientCertificateVerifyLogInfo(ccl,cv) in
+   if (getClientCertificateLogInfo(log1) = ccl &&
+       verify(certC,log1,cv) &&
+       getClientCertificateVerifyLogInfo(log2) = ccvl &&
+       mac(cfk,log2) = cfin) then
+      true
+   else false.
+*)
+
+param N1,N5,N6,
+      N7,N8,N9,N10,N11,N12,
+      N13,N14,N15,N16.
+
+let Client = 
+!N1
+    (in(io1,());
+    let (cr:nonce,x:key,cgx:elt) = send_client_hello() in
+    (* for 0-rtt  insert clientEphemeralKeys(cr,x,cgx); *)
+    out(io2,ClientHello(cr,cgx));
+    in(io3,ServerHelloIn(sr,cgy,log0));
+    let sil = ServerHelloLogInfo(cr,cgx,sr,cgy,log0) in
+    let (masterSecret:extracted,client_hk:key,server_hk:key,client_hiv:key,server_hiv:key,cfk:key,sfk:key,=true) = recv_server_hello(hk,sil,x) in
+    out(io4,(client_hk, server_hk, client_hiv, server_hiv));
+    in(io5,ServerFinishedIn(cert,s,m,log1)); 
+    let (client_ts0:key,server_ts0:key,=true) = recv_server_finished(sil,masterSecret,sfk,cert,s,m,log1) in   
+    let scl = ServerCertificateLogInfo(sil,cert,log1) in
+    let scvl = ServerCertificateVerifyLogInfo(scl,s) in
+    let sfl = ServerFinishedLogInfo(scvl,m) in
+    let cfin = send_client_finished_no_auth(sfl,cfk) in
+    event ClientAccept(cr,cgx,sr,cgy,log0,cert,log1,s,m,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,client_ts0,server_ts0);
+    if defined(corruptedServer) then 
+       out(io6,ClientFinishedOut(cfin));
+       in(io7,());
+       yield (* It would be better to leak the keys, but then the adversary 
+       	     	would obtain the keys by corrupting the server after the
+		end of the session *)
+    else 
+       out(io6,ClientFinishedOut(cfin));
+       in(io7,());
+       if cert = pkS then
+          (* The client is talking to the honest server.
+             Check that the shared key is secret. *)
+          (event ClientTerm(cr,cgx,sr,cgy,log0,log1,s,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,client_ts0,server_ts0);
+	   let client_ts0_secret_c: key = client_ts0 in
+	   let server_ts0_secret_c: key = server_ts0)
+       else 
+          out(io8, (client_ts0, server_ts0)))
+(*|
+!N2
+   (in(io,());
+    let (cr:nonce,x:key,gx:elt) = send_client_hello() in
+    out(io,ClientHello(cr,gx));
+    in(io,ServerHelloIn(sr,gy,l));
+    let sil = ServerHelloLogInfo(cr,gx,sr,gy) in
+    let (xES:extracted,hk:key,=true) = recv_server_hello(sil,x,l) in
+    out(io,());
+    in(io,ServerFinishedIn(cert,s,m,log1,log2,log3)); 
+    let (dk:key,cfk:key,=true) = recv_server_finished(sil,xES,xES,cert,s,m,log1,log2,log3) in   
+    out(io,());
+    in(io,ServerCertificateIn(certC,log4));
+    get clientLongTermKeys(=certC,sk) in
+    let scl = ServerCertificateLogInfo(sil,cert) in
+    let scvl = ServerCertificateVerifyLogInfo(scl,s) in
+    let sfl = ServerFinishedLogInfo(scvl,m) in
+    let ccl = ClientCertificateLogInfo(sfl,certC) in
+    let (sg:bitstring,=true) = send_client_certificate_verify(ccl,sk,log4) in
+    out(io,ClientCertificateVerifyOut(sg));
+    in(io,log5:bitstring);
+    let ccvl = ClientCertificateVerifyLogInfo(ccl,sg) in
+    let (cfin:bitstring,=true) = send_client_finished_client_auth(ccvl,cfk,log5) in
+    insert oneRTTClientDataKey(cr,sr,certC,cert,dk);
+    out(io,ClientFinishedOut(cfin)))
+*)
+.
+
+
+let Server = 
+ !N6
+  (in(io9,ClientHello(cr,sgx));
+   let (sr:nonce,sgy:elt,handshakeSecret:extracted) = recv_client_hello(hk,cr,sgx) in
+   out(io10,ServerHelloOut(sr,sgy));
+   in(io11,log0:bitstring);
+   let sil = ServerHelloLogInfo(cr,sgx,sr,sgy,log0) in
+   let (client_hk:key, server_hk: key, client_hiv: key, server_hiv: key, cfk: key, sfk: key, masterSecret: extracted) = onertt_hs_keys(sil,handshakeSecret) in
+   out(io12,(client_hk, server_hk, client_hiv, server_hiv));
+   in(io13,log1:bitstring);
+   (* The server is the honest server -- but the client can talk to other servers *)
+   let cert = pkS in
+   let sk = skS in
+   let scl = ServerCertificateLogInfo(sil,cert,log1) in
+   let sg = send_server_certificate_verify(scl,sk) in
+   let scvl = ServerCertificateVerifyLogInfo(scl,sg) in
+   let m = send_server_finished(scvl,sfk) in
+   let sfl = ServerFinishedLogInfo(scvl,m) in
+   let (client_ts0: key, server_ts0: key) = onertt_data_keys(masterSecret,sfl) in
+   event ServerAccept(cr,sgx,sr,sgy,log0,log1,sg,m,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,client_ts0,server_ts0);
+   out(io18,(ServerCertificateVerifyOut(sg), ServerFinishedOut(m)));
+   in(io19,ClientFinishedIn(cfin:bitstring));
+   if check_client_finished_no_auth(sfl,cfin,cfk) then
+   find j <= N1 suchthat defined(cgx[j]) && sgx = cgx[j] then
+   (
+   	(* The key share comes from the honest client,
+	the keys should be secret *)
+	event ServerTerm(cr,sgx,sr,sgy,log0,cert,log1,sg,m,cfin,client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,client_ts0,server_ts0);
+	let client_ts0_secret_s: key = client_ts0 in
+        let server_ts0_secret_s: key = server_ts0
+   )
+   else
+	out(io30, (client_ts0, server_ts0))
+ )
+(*|
+ !N7
+   (in(io,ClientHello(cr,gx));
+   let (sr:nonce,gy:elt,xES:extracted) = recv_client_hello(cr,gx) in
+   out(io,ServerHelloOut(sr,gy));
+   in(io,log:bitstring);
+   let sil = ServerHelloLogInfo(cr,gx,sr,gy) in
+   let (hk:key,=true) = onertt_hs_keys(sil,xES,log) in
+   out(io,hk);
+   in(io,(cert:certificate,log1:bitstring));
+   get serverLongTermKeys(=cert,sk,gss,ss) in
+   let scl = ServerCertificateLogInfo(sil,cert) in
+   let (sg:bitstring,=true) = send_server_certificate_verify(scl,sk,log1) in
+   out(io,ServerCertificateVerifyOut(sg));
+   in(io,log2:bitstring);
+   let scvl = ServerCertificateVerifyLogInfo(scl,sg) in
+   let (cfk:key,ts0:key,m:bitstring,=true) = send_server_finished(scvl,xES,xES,log2) in
+   out(io,ServerFinishedOut(m));
+   in(io,log3:bitstring);
+   let sfl = ServerFinishedLogInfo(scvl,m) in
+   let (dk:key,=true) = onertt_data_keys(sfl,ts0,log3) in
+   insert oneRTTServerFalseStartKey(cr,sr,cert,dk,cfk,empty_bytes);
+   out(io,());
+   in(io,ClientFinishedAuthIn(certC,cv,cfin,log4,log5));
+   let ccl = ClientCertificateLogInfo(sfl,certC) in
+   if (check_client_finished_client_auth(sfl,certC,cv,cfin,cfk,log4,log5)) then
+   insert oneRTTServerDataKey(cr,sr,certC,cert,dk))
+*).
+
+(*
+let Server0() = 
+ !(in(io,(ClientHello(cr,gx)));
+   new sr:nonce;
+   let (y:key,gy:key) = dh_keygen() in
+   get serverLongTermKeys(cert,sk,gss,ss) in
+   let ss = expH_P256(x,gs) in
+   let xSS = HKDF_extract(zero_key,ss) in
+   let dk0 = HKDF_expand(xSS,dk0_label,log) in
+   insert zeroRTTServerKey(cr,anon_cert,certS,gs,dk0);
+   let shlog = (ClientHello(cr,gy),ServerHello(sr,gy)) in
+   let s = DH_P256(y,gx) in
+   let xES = HKDF_extract(zero_key,s) in
+   let hk =  HKDF_expand(xES,hk_label,shlog) in    
+   insert oneRTTServerHSKey(cr,sr,xES,xSS,hk,certS,shlog);
+   out(io,(ServerHello(sr,gy)))
+  )
+ .
+ *)
+
+(* Corruption for forward secrecy *)
+
+let corrupt = 
+  in(cCorrupt, ()); 
+  let corruptedServer:bool = true in
+  out(cCorrupt, skS).
+
+   
+
+
+process 
+  in(io20,());
+  new hk: hashkey; (* Key that models the choice of the random oracle *)
+  new kseed:keyseed;
+  let skS = skgen(kseed) in
+  let pkS = pkcert(kseed) in
+(*
+  new kseed:keyseed;
+  let sk = skgen(kseed) in
+  let pk = pkcert(kseed) in
+  out(io,pk))*)
+  out(io21,pkS);
+(Client | Server
+   | corrupt
+   | hashoracle
+)

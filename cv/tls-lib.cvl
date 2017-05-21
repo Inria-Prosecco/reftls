@@ -1,0 +1,2157 @@
+forall x:bool; not(not(x)) = x.
+forall x:bool,y:bool; (not(x && y)) = (not(x) || not(y)).
+forall x:bool,y:bool; (not(x || y)) = (not(x) && not(y)).
+forall ; not(true) = false.
+forall ; not(false) = true.
+
+const bottom:bitstringbot.
+
+(* We define the equivalence used internally by the command "move array" *)
+
+define move_array_internal_macro(T) {
+
+param N, NX, Neq.
+
+equiv move_array(T)
+      !N new X:T; (!NX OX() := X, 
+                   !Neq Oeq(X':T) := X' = X)
+<=(#Oeq / |T|)=> [manual,computational]
+      !N (!NX OX() := find[unique] j<=NX suchthat defined(Y[j]) then Y[j] else new Y:T; Y,
+          !Neq Oeq(X':T) := find[unique] j<=NX suchthat defined(Y[j]) then X' = Y[j] else false).
+
+}
+
+
+(***************************** Symmetric encryption *********************************************)
+
+
+(* IND-CPA probabilistic symmetric encryption 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   key: type of keys, must be "bounded"
+   cleartext: type of cleartexts
+   ciphertext: type of ciphertexts
+   seed: type of random seeds for encryption, must be "bounded", typically "fixed".
+
+   kgen: key generation function 
+   enc: encryption function
+   dec: decryption function
+   injbot: natural injection from cleartext to bitstringbot
+   Z: function that returns for each cleartext a cleartext of the same length consisting only of zeroes.
+
+   Penc(t, N, l): probability of breaking the IND-CPA property in time
+   t for one key and N encryption queries with cleartexts of length at
+   most l
+
+   The types keyseed, key, cleartext, ciphertext, seed and the
+   probability Penc must be declared before this macro is
+   expanded. The functions kgen, enc, dec, injbot, and Z are declared
+   by this macro. They must not be declared elsewhere, and they can be
+   used only after expanding the macro.  
+*)
+
+define IND_CPA_sym_enc(keyseed, key, cleartext, ciphertext, seed, kgen, enc, dec, injbot, Z, Penc) { 
+
+param N, N2.
+
+fun enc(cleartext, key, seed): ciphertext.
+fun kgen(keyseed):key.
+fun dec(ciphertext, key): bitstringbot.
+
+fun enc2(cleartext, key, seed): ciphertext.
+fun kgen2(keyseed):key.
+
+fun injbot(cleartext):bitstringbot [compos].
+(* The function Z returns for each bitstring, a bitstring
+   of the same length, consisting only of zeroes. *)
+fun Z(cleartext):cleartext.
+
+forall x:cleartext; injbot(x) <> bottom.
+forall m:cleartext, r:keyseed, r2:seed; 
+	dec(enc(m, kgen(r), r2), kgen(r)) = injbot(m).
+
+equiv ind_cpa(enc)
+       ! N2 new r: keyseed; ! N new r2: seed; Oenc(x:cleartext) := enc(x, kgen(r), r2) 
+     <=(N2 * Penc(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N*time(Z, maxlength(x))), N, maxlength(x)))=> 
+       ! N2 new r: keyseed; ! N new r2: seed; Oenc(x:cleartext) := enc2(Z(x), kgen2(r), r2).
+
+}
+
+
+(* IND-CPA and INT-CTXT probabilistic symmetric encryption 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   key: type of keys, must be "bounded"
+   cleartext: type of cleartexts
+   ciphertext: type of ciphertexts
+   seed: type of random seeds for encryption, must be "bounded", typically "fixed".
+
+   kgen: key generation function 
+   enc: encryption function
+   dec: decryption function
+   injbot: natural injection from cleartext to bitstringbot
+   Z: function that returns for each cleartext a cleartext of the same length consisting only of zeroes.
+
+   Penc(t, N, l): probability of breaking the IND-CPA property in time
+   t for one key and N encryption queries with cleartexts of length at
+   most l
+   Pencctxt(t, N, N', l, l'): probability of breaking the INT-CTXT property
+   in time t for one key, N encryption queries, N' decryption queries with
+   cleartexts of length at most l and ciphertexts of length at most l'.
+
+   The types keyseed, key, cleartext, ciphertext, seed and the
+   probabilities Penc, Pencctxt must be declared before this macro is
+   expanded. The functions kgen, enc, dec, injbot, and Z are declared
+   by this macro. They must not be declared elsewhere, and they can be
+   used only after expanding the macro.
+*)
+
+
+define IND_CPA_INT_CTXT_sym_enc(keyseed, key, cleartext, ciphertext, seed, kgen, enc, dec, injbot, Z, Penc, Pencctxt) { 
+
+param N, N2, N3.
+
+fun enc(cleartext, key, seed): ciphertext.
+fun kgen(keyseed):key.
+fun dec(ciphertext, key): bitstringbot.
+
+fun enc2(cleartext, key, seed): ciphertext.
+fun kgen2(keyseed):key.
+
+fun injbot(cleartext):bitstringbot [compos].
+forall x:cleartext; injbot(x) <> bottom.
+
+(* The function Z returns for each bitstring, a bitstring
+   of the same length, consisting only of zeroes. *)
+fun Z(cleartext):cleartext.
+
+forall m:cleartext, r:keyseed, r2:seed; 
+	dec(enc(m, kgen(r), r2), kgen(r)) = injbot(m).
+
+	(* IND-CPA *)
+
+equiv ind_cpa(enc)
+       ! N2 new r: keyseed; ! N new r2: seed; Oenc(x:cleartext) := enc(x, kgen2(r), r2)
+     <=(N2 * Penc(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N*time(Z, maxlength(x))), N, maxlength(x)))=> 
+       ! N2 new r: keyseed; ! N new r2: seed; Oenc(x:cleartext) := enc2(Z(x), kgen2(r), r2).
+
+	(* INT-CTXT *)
+
+equiv int_ctxt(enc)
+      ! N2 new r: keyseed; (!N new r2: seed; Oenc(x:cleartext) := enc(x, kgen(r), r2),
+			    !N3 Odec(y:ciphertext) := dec(y,kgen(r))) 
+     <=(N2 * Pencctxt(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N3*time(dec,maxlength(y))), N, N3, maxlength(x), maxlength(y)))=> [computational]
+      ! N2 new r: keyseed [unchanged]; 
+      	       	  	   (!N new r2: seed [unchanged]; Oenc(x:cleartext) := let z:ciphertext =  enc(x, kgen2(r), r2) in z,
+			    !N3 Odec(y:ciphertext) := find j <= N suchthat defined(x[j],r2[j],z[j]) && z[j] = y then injbot(x[j]) else bottom).
+
+}
+
+(* IND-CCA2 probabilistic symmetric encryption 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   key: type of keys, must be "bounded"
+   cleartext: type of cleartexts
+   ciphertext: type of ciphertexts
+   seed: type of random seeds for encryption, must be "bounded", typically "fixed".
+   
+   kgen: key generation function 
+   enc: encryption function
+   dec: decryption function
+   injbot: natural injection from cleartext to bitstringbot
+   Z: function that returns for each cleartext a cleartext of the same length consisting only of zeroes.
+
+   Penc(t, N, N', l, l'): probability of breaking the IND-CCA2 property
+   in time t for one key, N encryption queries, N' decryption queries with
+   cleartexts of length at most l and ciphertexts of length at most l'.
+
+   The types keyseed, key, cleartext, ciphertext, seed and the
+   probability Penc must be declared before this macro is
+   expanded. The functions kgen, enc, dec, injbot, and Z are declared
+   by this macro. They must not be declared elsewhere, and they can be
+   used only after expanding the macro.
+*)
+
+define IND_CCA2_sym_enc(keyseed, key, cleartext, ciphertext, seed, kgen, enc, dec, injbot, Z, Penc) { 
+
+param N, N2, N3.
+
+fun enc(cleartext, key, seed): ciphertext.
+fun kgen(keyseed):key.
+fun dec(ciphertext, key): bitstringbot.
+
+fun enc2(cleartext, key, seed): ciphertext.
+fun kgen2(keyseed):key.
+fun dec2(ciphertext, key): bitstringbot.
+
+fun injbot(cleartext):bitstringbot [compos].
+forall x:cleartext; injbot(x) <> bottom.
+
+(* The function Z returns for each bitstring, a bitstring
+   of the same length, consisting only of zeroes. *)
+fun Z(cleartext):cleartext.
+
+forall m:cleartext, r:keyseed, r2:seed; 
+	dec(enc(m, kgen(r), r2), kgen(r)) = injbot(m).
+
+	(* IND-CCA2 *)
+
+equiv ind_cca2(enc)
+       ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := enc(x, kgen(r), r2),
+                             ! N3 Odec(y:ciphertext) := dec(y,kgen(r)))
+     <=(N2 * Penc(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N*time(Z, maxlength(x)) + N3*time(dec,maxlength(y))), N, N3, maxlength(x), maxlength(y)))=> 
+       ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := let z:ciphertext = enc2(Z(x), kgen2(r), r2) in z,
+			     ! N3 Odec(y:ciphertext) := find j <= N suchthat defined(x[j],r2[j],z[j]) && y = z[j] then injbot(x[j]) else dec2(y, kgen2(r))).
+
+}
+
+(* INT-PTXT probabilistic symmetric encryption 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   key: type of keys, must be "bounded"
+   cleartext: type of cleartexts
+   ciphertext: type of ciphertexts
+   seed: type of random seeds for encryption, must be "bounded", typically "fixed".
+   
+   kgen: key generation function 
+   enc: encryption function
+   dec: decryption function
+   injbot: natural injection from cleartext to bitstringbot
+
+   Pencptxt(t, N, N', l, l'): probability of breaking the INT-PTXT property
+   in time t for one key, N encryption queries, N' decryption queries with
+   cleartexts of length at most l and ciphertexts of length at most l'.
+
+   The types keyseed, key, cleartext, ciphertext, seed and the
+   probability Pencptxt must be declared before this macro is
+   expanded. The functions kgen, enc, dec, and injbot are declared
+   by this macro. They must not be declared elsewhere, and they can be
+   used only after expanding the macro.
+*)
+
+define INT_PTXT_sym_enc(keyseed, key, cleartext, ciphertext, seed, kgen, enc, dec, injbot, Pencptxt) { 
+
+param N, N2, N3.
+
+fun enc(cleartext, key, seed): ciphertext.
+fun kgen(keyseed):key.
+fun dec(ciphertext, key): bitstringbot.
+
+fun dec2(ciphertext, key): bitstringbot.
+
+fun injbot(cleartext):bitstringbot [compos].
+forall x:cleartext; injbot(x) <> bottom.
+
+forall m:cleartext, r:keyseed, r2:seed; 
+	dec(enc(m, kgen(r), r2), kgen(r)) = injbot(m).
+
+	(* INT-PTXT *)
+
+equiv int_ptxt(enc)
+      ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := enc(x, kgen(r), r2),
+			    ! N3 Odec(y:ciphertext) [useful_change] := dec(y,kgen(r))) 
+     <=(N2 * Pencptxt(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N3*time(dec,maxlength(y))), N, N3, maxlength(x), maxlength(y)))=> [computational]
+      ! N2 new r: keyseed [unchanged]; 
+      	       	  	   (! N new r2: seed [unchanged]; Oenc(x:cleartext) := enc(x, kgen(r), r2),
+			    ! N3 Odec(y:ciphertext) := 
+				let z = dec2(y, kgen(r)) in
+                                find j <= N suchthat defined(x[j]) && z = injbot(x[j]) then injbot(x[j]) else bottom).
+
+}
+
+(* IND-CCA2 and INT-PTXT probabilistic symmetric encryption 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   key: type of keys, must be "bounded"
+   cleartext: type of cleartexts
+   ciphertext: type of ciphertexts
+   seed: type of random seeds for encryption, must be "bounded", typically "fixed".
+   
+   kgen: key generation function 
+   enc: encryption function
+   dec: decryption function
+   injbot: natural injection from cleartext to bitstringbot
+   Z: function that returns for each cleartext a cleartext of the same length consisting only of zeroes.
+
+   Penc(t, N, N', l, l'): probability of breaking the IND-CCA2 property
+   in time t for one key, N encryption queries, N' decryption queries with
+   cleartexts of length at most l and ciphertexts of length at most l'.
+   Pencptxt(t, N, N', l, l'): probability of breaking the INT-PTXT property
+   in time t for one key, N encryption queries, N' decryption queries with
+   cleartexts of length at most l and ciphertexts of length at most l'.
+
+   The types keyseed, key, cleartext, ciphertext, seed and the
+   probabilities Penc, Pencctxt must be declared before this macro is
+   expanded. The functions kgen, enc, dec, injbot, and Z are declared
+   by this macro. They must not be declared elsewhere, and they can be
+   used only after expanding the macro.
+
+   CryptoVerif often needs manual guidance with this property,
+   because it does not know which property (IND-CCA2 or INT-PTXT)
+   to apply first. Moreover, when empty plaintexts are not allowed,
+   IND-CCA2 and INT-PTXT is equivalent to IND-CPA and INT-CTXT, 
+   which is much easier to use for CryptoVerif, so we recommend
+   using the latter property when possible.
+*)
+
+define IND_CCA2_INT_PTXT_sym_enc(keyseed, key, cleartext, ciphertext, seed, kgen, enc, dec, injbot, Z, Penc, Pencptxt) { 
+
+param N, N2, N3.
+
+fun enc(cleartext, key, seed): ciphertext.
+fun kgen(keyseed):key.
+fun dec(ciphertext, key): bitstringbot.
+
+fun enc2(cleartext, key, seed): ciphertext.
+fun kgen2(keyseed):key.
+fun dec2(ciphertext, key): bitstringbot.
+
+fun injbot(cleartext):bitstringbot [compos].
+forall x:cleartext; injbot(x) <> bottom.
+
+(* The function Z returns for each bitstring, a bitstring
+   of the same length, consisting only of zeroes. *)
+fun Z(cleartext):cleartext.
+
+forall m:cleartext, r:keyseed, r2:seed; 
+	dec(enc(m, kgen(r), r2), kgen(r)) = injbot(m).
+
+	(* IND-CCA2 *)
+
+equiv ind_cca2(enc)
+       ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := enc(x, kgen(r), r2),
+                             ! N3 Odec(y:ciphertext) := dec(y,kgen(r)))
+     <=(N2 * Penc(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N*time(Z, maxlength(x)) + N3*time(dec,maxlength(y))), N, N3, maxlength(x), maxlength(y)))=> 
+       ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := let z:ciphertext = enc2(Z(x), kgen2(r), r2) in z,
+			     ! N3 Odec(y:ciphertext) := find j <= N suchthat defined(x[j],r2[j],z[j]) && y = z[j] then injbot(x[j]) else dec(y, kgen2(r))).
+
+equiv ind_cca2_after_int_ptxt(enc)
+       ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := enc(x, kgen(r), r2),
+                             ! N3 Odec(y:ciphertext) := dec2(y,kgen(r)))
+     <=(N2 * Penc(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N*time(Z, maxlength(x)) + N3*time(dec,maxlength(y))), N, N3, maxlength(x), maxlength(y)))=> 
+       ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := let z:ciphertext = enc2(Z(x), kgen2(r), r2) in z,
+			     ! N3 Odec(y:ciphertext) := find j <= N suchthat defined(x[j],r2[j],z[j]) && y = z[j] then injbot(x[j]) else dec2(y, kgen2(r))).
+
+	(* INT-PTXT *)
+
+equiv int_ptxt(enc)
+      ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := enc(x, kgen(r), r2),
+			    ! N3 Odec(y:ciphertext) [useful_change] := dec(y,kgen(r))) 
+     <=(N2 * Pencptxt(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N3*time(dec,maxlength(y))), N, N3, maxlength(x), maxlength(y)))=> [computational]
+      ! N2 new r: keyseed [unchanged]; 
+      	       	  	   (! N new r2: seed [unchanged]; Oenc(x:cleartext) := enc(x, kgen(r), r2),
+			    ! N3 Odec(y:ciphertext) := 
+				let z = dec2(y, kgen(r)) in
+                                find j <= N suchthat defined(x[j]) && z = injbot(x[j]) then injbot(x[j]) else bottom).
+
+equiv int_ptxt_after_ind_cca2(enc)
+      ! N2 new r: keyseed; (! N new r2: seed; Oenc(x:cleartext) := enc2(x, kgen2(r), r2),
+			    ! N3 Odec(y:ciphertext) [useful_change] := dec(y,kgen2(r))) 
+     <=(N2 * Pencptxt(time + (N2-1)*(time(kgen) + N*time(enc, maxlength(x)) + N3*time(dec,maxlength(y))), N, N3, maxlength(x), maxlength(y)))=> [computational]
+      ! N2 new r: keyseed [unchanged]; 
+      	       	  	   (! N new r2: seed [unchanged]; Oenc(x:cleartext) := enc2(x, kgen2(r), r2),
+			    ! N3 Odec(y:ciphertext) := 
+				let z = dec2(y, kgen2(r)) in
+                                find j <= N suchthat defined(x[j]) && z = injbot(x[j]) then injbot(x[j]) else bottom).
+}
+
+(* SPRP block cipher
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   key: type of keys, must be "bounded"
+   blocksize: type of the input and output of the cipher, must be "fixed" and "large".
+   (The modeling of SPRP block ciphers is not perfect in that, in
+   order to encrypt a new message, one chooses a fresh random number,
+   not necessarily different from previously generated random
+   numbers. Then CryptoVerif needs to eliminate collisions between
+   those random numbers, so blocksize must really be "large".)
+
+   kgen: key generation function 
+   enc: encryption function
+   dec: decryption function
+
+   Penc(t, N, N'): probability of breaking the SPRP property
+   in time t for one key, N encryption queries, and N' decryption queries.
+
+   The types keyseed, key, blocksize and the probability Penc must be
+   declared before this macro is expanded. The functions kgen, enc,
+   dec are declared by this macro. They must not be declared
+   elsewhere, and they can be used only after expanding the macro.
+
+ *)
+
+
+define SPRP_cipher(keyseed, key, blocksize, kgen, enc, dec, Penc) {
+
+param N, N2, N3.
+
+fun enc(blocksize, key): blocksize.
+fun kgen(keyseed):key.
+fun dec(blocksize, key): blocksize.
+
+forall m:blocksize, r:keyseed; 
+	dec(enc(m, kgen(r)), kgen(r)) = m.
+
+equiv sprp(enc)
+       !N3 new r: keyseed; (!N Oenc(x:blocksize) := enc(x, kgen(r)),
+			!N2 Odec(m:blocksize) := dec(m, kgen(r)))
+     <=(N3 * (Penc(time + (N3-1)*(time(kgen) + N*time(enc) + N2*time(dec)), N, N2) + (N+N2)*(N+N2-1)/|blocksize|))=>
+       !N3 new r: keyseed; (!N Oenc(x:blocksize) :=
+		find[unique] j<=N suchthat defined(x[j],r2[j]) && x = x[j] then r2[j] 
+		orfind k<=N2 suchthat defined(r4[k],m[k]) && x = r4[k] then m[k] 
+		else new r2: blocksize; r2,
+			! N2 Odec(m:blocksize) :=
+		find[unique] j<=N suchthat defined(x[j],r2[j]) && m = r2[j] then x[j] 
+		orfind k<=N2 suchthat defined(r4[k],m[k]) && m = m[k] then r4[k] 
+		else new r4: blocksize; r4).
+
+}
+
+(* PRP block cipher
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   key: type of keys, must be "bounded"
+   blocksize: type of the input and output of the cipher, must be "fixed" and "large".
+   (The modeling of PRP block ciphers is not perfect in that, in order
+   to encrypt a new message, one chooses a fresh random number, not
+   necessarily different from previously generated random numbers. In
+   other words, we model a PRF rather than a PRP, and apply the
+   PRF/PRP switching lemma to make sure that this is sound. Then
+   CryptoVerif needs to eliminate collisions between those random
+   numbers, so blocksize must really be "large".)
+
+   kgen: key generation function 
+   enc: encryption function
+   dec: decryption function
+
+   Penc(t, N): probability of breaking the PRP property
+   in time t for one key and N encryption queries.
+
+   The types keyseed, key, blocksize and the probability Penc must be
+   declared before this macro is expanded. The functions kgen, enc,
+   dec are declared by this macro. They must not be declared
+   elsewhere, and they can be used only after expanding the macro.
+
+ *)
+
+
+define PRP_cipher(keyseed, key, blocksize, kgen, enc, dec, Penc) {
+
+param N, N2, N3.
+
+fun enc(blocksize, key): blocksize.
+fun kgen(keyseed):key.
+fun dec(blocksize, key): blocksize.
+
+forall m:blocksize, r:keyseed; 
+	dec(enc(m, kgen(r)), kgen(r)) = m.
+
+equiv prp(enc)
+       !N3 new r: keyseed; !N Oenc(x:blocksize) := enc(x, kgen(r))
+     <=(N3 * (Penc(time + (N3-1)*(time(kgen) + N*time(enc)), N) + N * (N-1) / |blocksize|))=>
+       !N3 new r: keyseed; !N Oenc(x:blocksize) := 
+		find[unique] j<=N suchthat defined(x[j],r2[j]) && x = x[j] then r2[j] 
+		else new r2: blocksize; r2.
+
+}
+
+(* Ideal Cipher Model
+   cipherkey: type of keys that correspond to the choice of the scheme, must be "bounded", typically "fixed".
+   key: type of keys (typically "large")
+   blocksize: type of the input and output of the cipher, must be "fixed" and "large".
+   (The modeling of the ideal cipher model is not perfect in that, in
+   order to encrypt a new message, one chooses a fresh random number,
+   not necessarily different from previously generated random
+   numbers. Then CryptoVerif needs to eliminate collisions between
+   those random numbers, so blocksize must really be "large".)
+
+   enc: encryption function
+   dec: decryption function
+   WARNING: the encryption and decryption functions take 2 keys as
+   input: the key of type cipherkey that corresponds to the choice of
+   the scheme, and the normal encryption/decryption key. The cipherkey
+   must be chosen once and for all at the beginning of the game and
+   the encryption and decryption oracles must be made available to the
+   adversary, by including a process such as
+       (! qE in(c1, (x:blocksize, ke:key)); out(c2, enc(ck,x,ke)))
+     | (! qD in(c3, (m:blocksize, kd:key)); out(c4, dec(ck,m,kd)))
+   where c1, c2, c3, c4 are channels, 
+   qE the number of requests to the encryption oracle,
+   qD the number of requests to the decryption oracle,
+   ck the cipherkey.
+   
+   The types cipherkey, key, blocksize must be declared before this macro is
+   expanded. The functions enc, dec are declared by this macro. They
+   must not be declared elsewhere, and they can be used only after
+   expanding the macro.
+
+ *)
+
+define ICM_cipher(cipherkey, key, blocksize, enc, dec) {
+
+param Ne, Nd, Nck.
+
+fun enc(cipherkey, blocksize, key): blocksize.
+fun dec(cipherkey, blocksize, key): blocksize.
+
+forall ck: cipherkey, m:blocksize, k:key; 
+	dec(ck, enc(ck, m, k), k) = m.
+
+equiv icm(enc)
+       !Nck new ck: cipherkey;
+            (!Ne Oenc(me:blocksize, ke:key) := enc(ck, me, ke),
+             !Nd Odec(md:blocksize, kd:key) := dec(ck, md, kd))
+     <=((#Oenc+#Odec)*(#Oenc+#Odec-1)/|blocksize|)=> [computational]
+       !Nck (!Ne Oenc(me:blocksize, ke:key) :=
+		find[unique] j<=Ne suchthat defined(me[j],ke[j],re[j]) && me = me[j] && ke = ke[j] then re[j] 
+		orfind k<=Nd suchthat defined(rd[k],md[k],kd[k]) && me = rd[k] && ke = kd[k] then md[k] 
+		else new re: blocksize; re,
+             !Nd Odec(md:blocksize, kd:key) :=
+		find[unique] j<=Ne suchthat defined(me[j],ke[j],re[j]) && md = re[j] && kd = ke[j] then me[j] 
+		orfind k<=Nd suchthat defined(rd[k],md[k],kd[k]) && md = md[k] && kd = kd[k] then rd[k] 
+		else new rd: blocksize; rd).
+
+(* The difference of probability is the probability of collision between two
+random numbers in blocksize among the N+N2 chosen random numbers. *)
+
+(*When CryptoVerif will support parametric processes 
+param qE, qD [noninteractive].
+channel c1, c2, c3, c4.
+let enc_dec_oracle(ck) = (! qE in(c1, (me:blocksize, ke:key)); out(c2, enc(ck,me,ke)))
+                       | (! qD in(c3, (md:blocksize, kd:key)); out(c4, dec(ck,md,kd))). 
+*)
+
+}
+
+
+(*************************************** MACs ***************************************)
+
+
+(* UF-CMA mac 
+   mkeyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   mkey: type of keys, must be "bounded"
+   macinput: type of inputs of MACs
+   macres: type of result of MACs
+
+   mkgen: key generation function 
+   mac: MAC function
+   check: verification function
+
+   Pmac(t, N, N', l): probability of breaking the UF-CMA property in
+   time t for one key, N MAC queries, N' verification queries for
+   messages of length at most l.
+
+   The types mkeyseed, mkey, macinput, macres and the probability Pmac
+   must be declared before this macro is expanded. The functions
+   mkgen, mac, check are declared by this macro. They must not be
+   declared elsewhere, and they can be used only after expanding the
+   macro.
+
+*)
+
+define UF_CMA_mac(mkeyseed, mkey, macinput, macres, mkgen, mac, check, Pmac) {
+
+param N, N2, N3.
+
+const mark: bitstring.
+
+fun mac(macinput, mkey):macres.
+fun check(macinput, mkey, macres): bool.
+fun mkgen(mkeyseed):mkey.
+
+fun mac2(macinput, mkey):macres.
+fun check2(macinput, mkey, macres): bool.
+fun mkgen2(mkeyseed):mkey.
+
+forall m:macinput, r:mkeyseed;
+	check(m, mkgen(r), mac(m, mkgen(r))).
+forall m:macinput, r:mkeyseed;
+	check2(m, mkgen2(r), mac2(m, mkgen2(r))).
+
+equiv uf_cma(mac)
+      ! N3 new r: mkeyseed;(
+	 !N Omac(x: macinput) := mac(x, mkgen(r)),
+	 !N2 Ocheck(m: macinput, ma: macres) := check(m, mkgen(r), ma))
+     <=(N3 * Pmac(time + (N3-1)*(time(mkgen) + N*time(mac,maxlength(x)) + N2*time(check,maxlength(m),maxlength(ma))), N, N2, max(maxlength(x), maxlength(m))))=> [computational]
+      ! N3 new r: mkeyseed [unchanged];(
+	 !N Omac(x: macinput) := mac2(x, mkgen2(r)),
+	 !N2 Ocheck(m: macinput, ma: macres) := 
+	    find j <= N suchthat defined(x[j]) && (m = x[j]) && check2(x[j], mkgen2(r), ma) then true else false).
+
+equiv uf_cma_corrupt(mac)
+      ! N3 new r: mkeyseed;(
+	 !N Omac(x: macinput) [useful_change] := mac(x, mkgen(r)),
+	 !N2 Ocheck(m: macinput, ma: macres) [useful_change] := check(m, mkgen(r), ma),
+	 Ocorrupt() [10] := r)
+     <=(N3 * Pmac(time + (N3-1)*(time(mkgen) + N*time(mac,maxlength(x)) + N2*time(check,maxlength(m),maxlength(ma))), N, N2, max(maxlength(x), maxlength(m))))=> [manual,computational]
+      ! N3 new r: mkeyseed [unchanged];(
+	 !N Omac(x: macinput) := mac2(x, mkgen2(r)),
+	 !N2 Ocheck(m: macinput, ma: macres) := 
+	    if defined(corrupt) then check2(m, mkgen2(r), ma) else
+	    find j <= N suchthat defined(x[j]) && (m = x[j]) && check2(x[j], mkgen2(r), ma) then true else false,
+	 Ocorrupt() := let corrupt: bitstring = mark in r).
+
+}
+
+(* SUF-CMA mac (strongly unforgeable MAC)
+   The difference between a UF-CMA MAC and a SUF-CMA MAC is that, for a UF-CMA MAC, the adversary may
+   easily forge a new MAC for a message for which he has already seen a MAC. Such a forgery is guaranteed 
+   to be hard for a SUF-CMA MAC.
+ 
+   mkeyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   mkey: type of keys, must be "bounded"
+   macinput: type of inputs of MACs
+   macres: type of result of MACs
+
+   mkgen: key generation function 
+   mac: MAC function
+   check: verification function
+
+   Pmac(t, N, N', l): probability of breaking the SUF-CMA property in
+   time t for one key, N MAC queries, N' verification queries for
+   messages of length at most l.
+
+   The types mkeyseed, mkey, macinput, macres and the probability Pmac
+   must be declared before this macro is expanded. The functions
+   mkgen, mac, check are declared by this macro. They must not be
+   declared elsewhere, and they can be used only after expanding the
+   macro.
+
+*)
+
+define SUF_CMA_mac(mkeyseed, mkey, macinput, macres, mkgen, mac, check, Pmac) {
+
+param N, N2, N3.
+
+const mark: bitstring.
+
+fun mac(macinput, mkey):macres.
+fun check(macinput, mkey, macres): bool.
+fun mkgen(mkeyseed):mkey.
+
+fun mac2(macinput, mkey):macres.
+fun mkgen2(mkeyseed):mkey.
+
+forall m:macinput, r:mkeyseed;
+	check(m, mkgen(r), mac(m, mkgen(r))).
+
+equiv suf_cma(mac)
+      ! N3 new r: mkeyseed;(
+	 !N Omac(x: macinput) := mac(x, mkgen(r)),
+	 !N2 Ocheck(m: macinput, ma: macres) := check(m, mkgen(r), ma))
+     <=(N3 * Pmac(time + (N3-1)*(time(mkgen) + N*time(mac,maxlength(x)) + N2*time(check,maxlength(m),maxlength(ma))), N, N2, max(maxlength(x), maxlength(m))))=> [computational]
+      ! N3 new r: mkeyseed [unchanged];(
+	 !N Omac(x: macinput) := let ma2:macres = mac2(x, mkgen2(r)) in ma2,
+	 !N2 Ocheck(m: macinput, ma: macres) := 
+	    find j <= N suchthat defined(x[j], ma2[j]) && (m = x[j]) && ma = ma2[j] then true else false).
+
+equiv suf_cma_corrupt(mac) 
+      ! N3 new r: mkeyseed;(
+	 !N Omac(x: macinput) [useful_change] := mac(x, mkgen(r)),
+	 !N2 Ocheck(m: macinput, ma: macres) [useful_change] := check(m, mkgen(r), ma),
+	 Ocorrupt() [10] := r)
+     <=(N3 * Pmac(time + (N3-1)*(time(mkgen) + N*time(mac,maxlength(x)) + N2*time(check,maxlength(m),maxlength(ma))), N, N2, max(maxlength(x), maxlength(m))))=> [manual,computational]
+      ! N3 new r: mkeyseed [unchanged];(
+	 !N Omac(x: macinput) := let ma2:macres = mac2(x, mkgen2(r)) in ma2,
+	 !N2 Ocheck(m: macinput, ma: macres) := 
+	    if defined(corrupt) then check(m, mkgen2(r), ma) else
+	    find j <= N suchthat defined(x[j], ma2[j]) && (m = x[j]) && ma = ma2[j] then true else false,
+	 Ocorrupt() := let corrupt: bitstring = mark in r).
+
+}
+
+(******************************* Public-key encryption *******************************)
+
+(* IND-CCA2 probabilistic public-key encryption 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   pkey: type of public keys, must be "bounded"
+   skey: type of secret keys, must be "bounded"
+   cleartext: type of cleartexts, must be "bounded" or "fixed" 
+      (the encryptions of *all* cleartexts of any length
+       are assumed to be indistinguishable from each other).
+   ciphertext: type of ciphertexts
+   seed: type of random seeds for encryption, must be "bounded", typically "fixed".
+
+   pkgen: public-key generation function 
+   skgen: secret-key generation function
+   enc: encryption function
+   dec: decryption function
+   injbot: natural injection from cleartext to bitstringbot
+   Z: a constant cleartext
+
+   Penc(t, N): probability of breaking the IND-CCA2 property
+   in time t for one key and N decryption queries.
+   Penccoll: probability of collision between independently generated keys
+
+   The types keyseed, pkey, skey, cleartext, ciphertext, seed and the
+   probabilities Penc, Penccoll must be declared before this macro is
+   expanded. The functions pkgen, skgen, enc, dec, injbot, and the
+   constant Z are declared by this macro. They must not be declared
+   elsewhere, and they can be used only after expanding the macro. 
+*)
+
+
+define IND_CCA2_public_key_enc(keyseed, pkey, skey, cleartext, ciphertext, seed, skgen, pkgen, enc, dec, injbot, Z, Penc, Penccoll) {
+
+param N, N2, N3, N4.
+
+fun enc(cleartext, pkey, seed): ciphertext.
+fun skgen(keyseed):skey.
+fun pkgen(keyseed):pkey.
+fun dec(ciphertext, skey): bitstringbot.
+
+fun enc2(cleartext, pkey, seed): ciphertext.
+fun skgen2(keyseed):skey.
+fun pkgen2(keyseed):pkey.
+fun dec2(ciphertext, skey): bitstringbot.
+
+fun injbot(cleartext):bitstringbot [compos].
+
+const Z:cleartext.
+
+forall m:cleartext, r:keyseed, r2:seed; 
+	dec(enc(m, pkgen(r), r2), skgen(r)) = injbot(m).
+forall m:cleartext, r:keyseed, r2:seed; 
+	dec2(enc2(m, pkgen2(r), r2), skgen2(r)) = injbot(m).
+
+equiv ind_cca2(enc)
+       !N3 new r: keyseed; (Opk() [2] := pkgen(r),
+			    !N2 Odec(m:ciphertext) := dec(m, skgen(r)),
+                            !N new r1:seed; Oenc(x1:cleartext) := enc(x1, pkgen(r),r1)),
+       !N4 new r2:seed; Oenc2(x:cleartext, y:pkey) [3] := enc(x,y,r2) [all]
+     <=((N3 * N + N4) * Penc(time + (N4+N-1) * time(enc) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(dec, maxlength(m)) + N * time(enc)), N2))=> 
+       !N3 new r: keyseed; (Opk() := pkgen2(r),
+			    !N2 Odec(m:ciphertext) :=
+                find j <= N suchthat defined(m1[j],x1[j]) && m = m1[j] then injbot(x1[j]) else
+		find j <= N4 suchthat defined(m2[j],y[j],x[j]) &&
+		y[j] = pkgen2(r) && m = m2[j] then injbot(x[j]) else dec2(m, skgen2(r)),
+		            !N new r1:seed; Oenc(x1:cleartext) :=
+			let m1:ciphertext = enc2(Z, pkgen2(r), r1) in
+			m1),
+       !N4 Oenc2(x:cleartext, y:pkey) :=
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then
+			(new r2:seed; 
+			let m2:ciphertext = enc2(Z, y, r2) in
+			m2)
+		else new r3:seed; enc(x,y,r3).
+
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen(r2) <=(Penccoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen2(r1) = pkgen2(r2) <=(Penccoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen2(r2) <=(Penccoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen(r2) <=(Penccoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen2(r2) <=(Penccoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen2(r1) = skgen2(r2) <=(Penccoll)=> false.
+
+}
+
+(*************************************** Signatures ******************************)
+
+(* UF-CMA probabilistic signatures 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   pkey: type of public keys, must be "bounded"
+   skey: type of secret keys, must be "bounded"
+   signinput: type of inputs of signatures
+   signature: type of signatures
+   seed: type of random seeds for signatures, must be "bounded", typically "fixed"
+
+   pkgen: public-key generation function 
+   skgen: secret-key generation function
+   sign: signature function
+   check: verification function
+
+   Psign(t, N, l): probability of breaking the UF-CMA property
+   in time t, for one key, N signature queries with messages of length
+   at most l.
+   Psigncoll: probability of collision between independently generated keys
+
+   The types keyseed, pkey, skey, signinput, signature, seed and the
+   probabilities Psign, Psigncoll must be declared before this macro
+   is expanded. The functions pkgen, skgen, sign, and check are
+   declared by this macro. They must not be declared elsewhere, and
+   they can be used only after expanding the macro.  
+*)
+
+define UF_CMA_signature(keyseed, pkey, skey, signinput, signature, seed, skgen, pkgen, sign, check, Psign, Psigncoll) {
+
+param N, N2, N3, N4.
+
+const mark: bitstring.
+
+fun sign(signinput, skey, seed): signature.
+fun skgen(keyseed):skey.
+fun pkgen(keyseed):pkey.
+fun check(signinput, pkey, signature): bool.
+
+fun sign2(signinput, skey, seed): signature.
+fun skgen2(keyseed):skey.
+fun pkgen2(keyseed):pkey.
+fun check2(signinput, pkey, signature): bool.
+
+forall m:signinput, r:keyseed, r2:seed; 
+	check(m, pkgen(r), sign(m, skgen(r), r2)) = true.
+forall m:signinput, r:keyseed, r2:seed; 
+	check2(m, pkgen2(r), sign2(m, skgen2(r), r2)) = true.
+
+equiv uf_cma(sign)
+       !N3 new r: keyseed; (Opk() [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) := sign(x, skgen(r), r2),
+			    !N Ocheck(m1: signinput, si1:signature) := check(m1, pkgen(r), si1)),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(m, y, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m1), maxlength(m)), max(maxlength(si1), maxlength(si))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign2(x, skgen2(r), r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check2(m1, pkgen2(r), si1) then true else false),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k]) && y = pkgen2(r[k]) && m = x[j,k] && check2(m, y, si) then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(m,y,si).
+
+equiv uf_cma_corrupt(sign)
+       !N3 new r: keyseed; (Opk() [useful_change] [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) [useful_change] := sign(x, skgen(r), r2),
+			    !N Ocheck(m1: signinput, si1:signature) [useful_change] := check(m1, pkgen(r), si1),
+			    Ocorrupt() [10] := r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(m, y, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m1), maxlength(m)), max(maxlength(si1), maxlength(si))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [manual,computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign2(x, skgen2(r), r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+			      if defined(corrupt) then check2(m1, pkgen2(r), si1) else
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check2(m1, pkgen2(r), si1) then true else false,
+			    Ocorrupt() := let corrupt: bitstring = mark in r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find k <= N3 suchthat defined(r[k],corrupt[k]) && y = pkgen2(r[k]) then check2(m, y, si) else
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k]) && y = pkgen2(r[k]) && m = x[j,k] && check2(m, y, si) then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(m,y,si).
+
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen2(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen2(r1) = skgen2(r2) <=(Psigncoll)=> false.
+
+}
+
+(* SUF-CMA probabilistic signatures 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   pkey: type of public keys, must be "bounded"
+   skey: type of secret keys, must be "bounded"
+   signinput: type of inputs of signatures
+   signature: type of signatures
+   seed: type of random seeds for signatures, must be "bounded", typically "fixed"
+
+   pkgen: public-key generation function 
+   skgen: secret-key generation function
+   sign: signature function
+   check: verification function
+
+   Psign(t, N, l): probability of breaking the SUF-CMA property
+   in time t, for one key, N signature queries with messages of length
+   at most l.
+   Psigncoll: probability of collision between independently generated keys
+
+   The types keyseed, pkey, skey, signinput, signature, seed and the
+   probabilities Psign, Psigncoll must be declared before this macro
+   is expanded. The functions pkgen, skgen, sign, and check are
+   declared by this macro. They must not be declared elsewhere, and
+   they can be used only after expanding the macro.  
+*)
+
+define SUF_CMA_signature(keyseed, pkey, skey, signinput, signature, seed, skgen, pkgen, sign, check, Psign, Psigncoll) {
+
+param N, N2, N3, N4.
+
+const mark: bitstring.
+
+fun sign(signinput, skey, seed): signature.
+fun skgen(keyseed):skey.
+fun pkgen(keyseed):pkey.
+fun check(signinput, pkey, signature): bool.
+
+fun sign2(signinput, skey, seed): signature.
+fun skgen2(keyseed):skey.
+fun pkgen2(keyseed):pkey.
+fun check2(signinput, pkey, signature): bool.
+
+forall m:signinput, r:keyseed, r2:seed; 
+	check(m, pkgen(r), sign(m, skgen(r), r2)) = true.
+forall m:signinput, r:keyseed, r2:seed; 
+	check2(m, pkgen2(r), sign2(m, skgen2(r), r2)) = true.
+
+equiv suf_cma(sign)
+       !N3 new r: keyseed; (Opk() [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) := sign(x, skgen(r), r2),
+			    !N Ocheck(m1: signinput, si1:signature) := check(m1, pkgen(r), si1)),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(m, y, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m), maxlength(m1)), max(maxlength(si), maxlength(si1))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := let s:signature = sign2(x, skgen2(r), r2) in s,
+			    !N Ocheck(m1: signinput, si1:signature) :=
+                              find j <= N2 suchthat defined(x[j],s[j]) && m1 = x[j] && si1 = s[j] then true else false),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k],s[j,k]) && y = pkgen2(r[k]) && m = x[j,k] && si = s[j,k] then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(m,y,si).
+
+equiv suf_cma_corrupt(sign)
+       !N3 new r: keyseed; (Opk() [useful_change] [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) [useful_change] := sign(x, skgen(r), r2),
+			    !N Ocheck(m1: signinput, si1:signature) [useful_change] := check(m1, pkgen(r), si1),
+			    Ocorrupt() [10] := r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(m, y, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m), maxlength(m1)), max(maxlength(si), maxlength(si1))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [manual,computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := let s:signature = sign2(x, skgen2(r), r2) in s,
+			    !N Ocheck(m1: signinput, si1:signature) :=
+			      if defined(corrupt) then check2(m1, pkgen2(r), si1) else
+                              find j <= N2 suchthat defined(x[j],s[j]) && m1 = x[j] && si1 = s[j] then true else false,
+			    Ocorrupt() := let corrupt: bitstring = mark in r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find k <= N3 suchthat defined(r[k],corrupt[k]) && y = pkgen2(r[k]) then check2(m, y, si) else
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k],s[j,k]) && y = pkgen2(r[k]) && m = x[j,k] && si = s[j,k] then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(m,y,si).
+
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen2(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen2(r1) = skgen2(r2) <=(Psigncoll)=> false.
+
+}
+
+(******************************* Hash functions ****************************)
+
+(* Hash function in the random oracle model
+   key: type of the key of the hash function, which models the choice of the hash function, must be "bounded", typically "fixed"
+   hashinput: type of the input of the hash function
+   hashoutput: type of the output of the hash function, must be "bounded" and "large", typically "fixed".
+
+   hash: the hash function.
+   WARNING: hash is a keyed hash function.
+   The key must be generated once and for all at the beginning of the game 
+   and the hash oracle must be made available to the adversary,
+   by including a process such as
+      ! qH in(c1, x:hashinput); out(c2, hash(k,x))
+   where k is the key, qH the number of requests to the hash oracle,
+   c1 and c2 channels.
+
+   The types key, hashinput, and hashoutput must be declared before
+   this macro.  The function hash is defined by this macro. It not
+   must be declared elsewhere, and it can be used only after expanding
+   the macro.
+
+ *)
+
+define ROM_hash(key, hashinput, hashoutput, hash (*, hashoracle, qH*)) {
+
+param Nh, N, Neq.
+
+fun hash(key, hashinput):hashoutput.
+
+equiv rom(hash)
+      !Nh new k:key;
+      	  (!N Ohash(x:hashinput) := hash(k,x),
+      	   !Neq Oeq(x':hashinput, r':hashoutput) := r' = hash(k,x'))
+      <=(#Oeq / |hashoutput|)=> [computational]
+      !Nh (!N Ohash(x:hashinput) := 
+              find[unique] j <= N suchthat defined(x[j],r[j]) && x = x[j] then r[j] else
+	      new r:hashoutput; r,
+      	   !Neq Oeq(x':hashinput, r':hashoutput) := 
+              find[unique] j <= N suchthat defined(x[j],r[j]) && x' = x[j] then r' = r[j] else
+	      false).
+
+(* When CryptoVerif will support parametric processes
+param qH [noninteractive].
+channel c1, c2.
+let hashoracle(k) = ! qH in(c1, x:hashinput); out(c2, hash(k,x)). 
+*)
+}
+
+(* ROM_hash_pair, ROM_hash_triple, and ROM_hash_quad are similar
+   to ROM_hash, for random oracle with 2, 3, and 4 arguments
+   respectively. Letting N be the number of arguments of the oracle,
+   hashinput1...hashinputN are the types of the inputs of the hash function
+   and the hash oracle that must be provided to the adversary is
+   ! qH in(c1, (x1:hashinput1,...,xN:hashinputN)); out(c2, hash(k,x1,...,xN))
+*)
+
+define ROM_hash_pair(key, hashinput1, hashinput2, hashoutput, hash) {
+
+param Nh, N, Neq.
+
+fun hash(key, hashinput1, hashinput2):hashoutput.
+
+equiv rom(hash)
+      !Nh new k:key;
+      	  (!N Ohash(x1:hashinput1, x2:hashinput2) := hash(k,x1,x2),
+      	   !Neq Oeq(x1':hashinput1, x2':hashinput2, r':hashoutput) := 
+	       r' = hash(k,x1',x2'))
+      <=(#Oeq / |hashoutput|)=> [computational]
+      !Nh (!N Ohash(x1:hashinput1, x2:hashinput2) := 
+              find[unique] j <= N suchthat defined(x1[j],x2[j],r[j]) && x1 = x1[j] && x2 = x2[j] then r[j] else
+	      new r:hashoutput; r,
+      	   !Neq Oeq(x1':hashinput1, x2':hashinput2, r':hashoutput) := 
+              find[unique] j <= N suchthat defined(x1[j],x2[j],r[j]) && x1' = x1[j] && x2' = x2[j] then r' = r[j] else
+	      false).
+
+}
+
+define ROM_hash_triple(key, hashinput1, hashinput2, hashinput3, hashoutput, hash) {
+
+param Nh, N, Neq.
+
+fun hash(key, hashinput1, hashinput2, hashinput3):hashoutput.
+
+equiv rom(hash)
+      !Nh new k:key;
+      	  (!N Ohash(x1:hashinput1, x2:hashinput2, x3: hashinput3) := hash(k,x1,x2,x3),
+      	   !Neq Oeq(x1':hashinput1, x2':hashinput2, x3': hashinput3, r':hashoutput) := 
+	       r' = hash(k,x1',x2',x3'))
+      <=(#Oeq / |hashoutput|)=> [computational]
+      !Nh (!N Ohash(x1:hashinput1, x2:hashinput2, x3: hashinput3) := 
+              find[unique] j <= N suchthat defined(x1[j],x2[j],x3[j],r[j]) && x1 = x1[j] && x2 = x2[j] && x3 = x3[j] then r[j] else
+	      new r:hashoutput; r,
+      	   !Neq Oeq(x1':hashinput1, x2':hashinput2, x3': hashinput3, r':hashoutput) := 
+              find[unique] j <= N suchthat defined(x1[j],x2[j],x3[j],r[j]) && x1' = x1[j] && x2' = x2[j] && x3' = x3[j] then r' = r[j] else
+	      false).
+
+}
+
+define ROM_hash_quad(key, hashinput1, hashinput2, hashinput3, hashinput4, hashoutput, hash) {
+
+param Nh, N, Neq.
+
+fun hash(key, hashinput1, hashinput2, hashinput3, hashinput4):hashoutput.
+
+equiv rom(hash)
+      !Nh new k:key;
+      	  (!N Ohash(x1:hashinput1, x2:hashinput2, x3: hashinput3, x4: hashinput4) := hash(k,x1,x2,x3,x4),
+      	   !Neq Oeq(x1':hashinput1, x2':hashinput2, x3': hashinput3, x4':hashinput4, r':hashoutput) := 
+	       r' = hash(k,x1',x2',x3',x4'))
+      <=(#Oeq / |hashoutput|)=> [computational]
+      !Nh (!N Ohash(x1:hashinput1, x2:hashinput2, x3: hashinput3, x4:hashinput4) := 
+              find[unique] j <= N suchthat defined(x1[j],x2[j],x3[j],x4[j],r[j]) && x1 = x1[j] && x2 = x2[j] && x3 = x3[j] && x4 = x4[j] then r[j] else
+	      new r:hashoutput; r,
+      	   !Neq Oeq(x1':hashinput1, x2':hashinput2, x3': hashinput3, x4': hashinput4, r':hashoutput) := 
+              find[unique] j <= N suchthat defined(x1[j],x2[j],x3[j],x4[j],r[j]) && x1' = x1[j] && x2' = x2[j] && x3' = x3[j] && x4' = x4[j] then r' = r[j] else
+	      false).
+
+}
+
+
+(* Collision resistant hash function 
+   key: type of the key of the hash function, must be "bounded", typically "fixed"
+   hashinput: type of the input of the hash function
+   hashoutput: type of the output of the hash function
+
+   hash: the hash function.
+   Phash: probability of breaking collision resistance.
+   WARNING: A collision resistant hash function is a keyed hash function.
+   The key must be generated once and for all at the beginning of the game,
+   and immediately made available to the adversary.
+
+   The types key, hashinput, hashoutput, and the probability Phash
+   must be declared before this macro.  The function hash is defined
+   by this macro. It must not be declared elsewhere, and it can be
+   used only after expanding the macro.
+
+ *)
+
+define CollisionResistant_hash(key, hashinput, hashoutput, hash, Phash) {
+
+fun hash(key, hashinput):hashoutput.
+
+collision new k:key; forall x:hashinput, y:hashinput;
+	hash(k,x) = hash(k,y) <=(Phash(time))=> x = y.
+
+}
+
+(******************************** Diffie-Hellman ***************************)
+
+(* Computational Diffie-Hellman 
+   G: type of group elements (must be "bounded" and "large", of cardinal 
+   a prime q), neutral element excluded (so |G| = q-1)
+   Z: type of exponents (must be "bounded" and "large", supposed to be 
+   {1, ..., q-1})
+
+   g: a generator of the group
+   exp: the exponentiation function
+   mult: the multiplication function for exponents, product modulo q in
+   {1, ..., q-1}, i.e. in the group (Z/qZ)*
+
+   pCDH: the probability of breaking the CDH assumption
+
+   The types G and Z and the probability pCDH must be declared before
+   this macro.  The functions g, exp, and mult are defined by this
+   macro. They must not be declared elsewhere, and they can be used
+   only after expanding the macro.
+
+*)
+
+define CDH(G, Z, g, exp, mult, pCDH) {
+
+fun exp(G,Z): G.
+fun exp'(G,Z): G.
+const g:G.
+
+fun mult(Z,Z): Z. 
+equation commut(mult).
+
+(* exponents multiply *)
+
+forall a:G, x:Z, y:Z;
+  exp(exp(a,x), y) = exp(a, mult(x,y)).
+
+(* injectivity *)
+
+forall x:Z, y:Z; (exp(g,x) = exp(g,y)) = (x = y).
+forall x:Z, y:Z; (exp'(g,x) = exp'(g,y)) = (x = y).
+
+(* collision between products *)
+
+collision new x1:Z; new x2:Z; new x3:Z; new x4:Z; 
+  mult(x1,x2) = mult(x3,x4) <=(1/|Z|)=> false. 
+
+forall x:Z, y:Z, y':Z; 
+  (mult(x,y) = mult(x,y')) = (y = y').
+
+(* replace a random group element with an exponentiation, and conversely *)
+
+param N, N'.
+
+equiv group_to_exp_strict(exp)
+      !N new X:G; (OX() := X, !N' OXm(m:Z) [useful_change] := exp(X,m))
+<=(0)=> [computational]
+      !N new x:Z; (OX() := exp(g,x), !N' OXm(m:Z) := exp(g,mult(x,m))).
+
+(* This equivalence is very general, apply it only manually, because
+   otherwise it might be applied too often.  The equivalence above is
+   particular case applied only when X is inside exp, and good for
+   automatic proofs. *)
+
+equiv group_to_exp(exp)
+      !N new X:G; OX() := X 
+<=(0)=> [manual, computational]    
+      !N new x:Z; OX() := exp(g,x).
+
+
+equiv exp_to_group(exp)
+      !N new x:Z; OX() := exp(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+equiv exp'_to_group(exp)
+      !N new x:Z; OX() := exp'(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+(* the CDH assumption *) 
+
+const mark: bitstring.
+
+param na, naDDH, nb, nbDDH.
+
+equiv cdh(exp)
+    !na new a:Z; (
+      OA() := exp(g,a), 
+      Oa() [3] := a,
+      !naDDH ODDHa(m:G, j<=nb) [useful_change] := m = exp(g, mult(b[j], a))
+    ),
+    !nb new b:Z; (
+      OB() := exp(g,b),
+      Ob() [3] := b,
+      !nbDDH ODDHb(m:G, j<=na) := m = exp(g, mult(a[j], b))
+    )
+<=((#ODDHa + #ODDHb) * max(1, 7.4*#Oa) * max(1, 7.4*#Ob) * pCDH(time + (na + nb + #ODDHa + #ODDHb) * time(exp)))=> [computational]
+    !na new a:Z [unchanged]; (
+      OA() := exp'(g,a), 
+      Oa() := let ka:bitstring = mark in a,
+      !naDDH ODDHa(m:G, j<=nb) := find u<=nb suchthat defined(kb[u],b[u]) && b[j] = b[u] then m = exp'(g, mult(b[j], a)) else 
+                            if defined(ka) then m = exp'(g, mult(b[j], a)) else false
+    ),
+    !nb new b:Z [unchanged]; (
+      OB() := exp'(g,b), 
+      Ob() := let kb:bitstring = mark in b,
+      !nbDDH ODDHb(m:G, j<=na) := find u<=na suchthat defined(ka[u],a[u]) && a[j] = a[u] then m = exp'(g, mult(a[j], b)) else 
+                            if defined(kb) then m = exp'(g, mult(a[j], b)) else false
+    ).
+
+}
+
+(* Decisional Diffie-Hellman 
+   G: type of group elements (must be "bounded" and "large", of cardinal 
+   a prime q), neutral element excluded (so |G| = q-1)
+   Z: type of exponents (must be "bounded" and "large", supposed to be 
+   {1, ..., q-1})
+
+   g: a generator of the group
+   exp: the exponentiation function
+   mult: the multiplication function for exponents, product modulo q in
+   {1, ..., q-1}, i.e. in the group (Z/qZ)*
+
+   pDDH: the probability of breaking the DDH assumption
+
+   The types G and Z and the probability pDDH must be declared before
+   this macro.  The functions g, exp, and mult are defined by this
+   macro. They must not be declared elsewhere, and they can be used
+   only after expanding the macro.
+*)
+
+define DDH(G, Z, g, exp, mult, pDDH) {
+
+fun exp(G,Z): G.
+fun exp'(G,Z): G.
+const g:G.
+
+fun mult(Z,Z): Z. 
+equation commut(mult).
+
+(* exponents multiply *)
+
+forall a:G, x:Z, y:Z;
+  exp(exp(a,x), y) = exp(a, mult(x,y)).
+
+(* injectivity *)
+
+forall x:Z, y:Z; (exp(g,x) = exp(g,y)) = (x = y).
+forall x:Z, y:Z; (exp'(g,x) = exp'(g,y)) = (x = y).
+
+(* collision between products *)
+
+collision new x1:Z; new x2:Z; new x3:Z; new x4:Z; 
+  mult(x1,x2) = mult(x3,x4) <=(1/|Z|)=> false. 
+
+forall x:Z, y:Z, y':Z; 
+  (mult(x,y) = mult(x,y')) = (y = y').
+
+(* replace a random group element with an exponentiation, and conversely *)
+
+param N, N'.
+
+equiv group_to_exp_strict(exp)
+      !N new X:G; (OX() := X, !N' OXm(m:Z) [useful_change] := exp(X,m))
+<=(0)=> [computational]
+      !N new x:Z; (OX() := exp(g,x), !N' OXm(m:Z) := exp(g,mult(x,m))).
+
+(* This equivalence is very general, apply it only manually, because
+   otherwise it might be applied too often.  The equivalence above is
+   particular case applied only when X is inside exp, and good for
+   automatic proofs. *)
+
+equiv group_to_exp(exp)
+      !N new X:G; OX() := X 
+<=(0)=> [manual, computational]    
+      !N new x:Z; OX() := exp(g,x).
+
+
+equiv exp_to_group(exp)
+      !N new x:Z; OX() := exp(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+equiv exp'_to_group(exp)
+      !N new x:Z; OX() := exp'(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+(* the DDH assumption *) 
+
+const mark: bitstring.
+event ev_abort.
+
+param na, naDH, nb, nbDH.
+
+equiv ddh(exp)
+    !na new a:Z; (
+      OA() := exp(g,a), 
+      Oa() [3] := a,
+      !naDH ODHa(j<=nb) [useful_change] := exp(g, mult(b[j], a))
+    ),
+    !nb new b:Z; (
+      OB() := exp(g,b),
+      Ob() [3] := b,
+      !nbDH ODHb(j<=na) := exp(g, mult(a[j], b))
+    )
+<=((#ODHa + #ODHb) * na * nb * pDDH(time + (na + nb + #ODHa + #ODHb) * time(exp)))=>
+    !na new a:Z; (
+      OA() := exp'(g,a), 
+      Oa() := 
+         find uaDH <= naDH suchthat defined(ka'[uaDH]) then event_abort ev_abort else
+	 find ubDH <= nbDH, ub <= nb suchthat defined(kb'[ubDH, ub], a'[ubDH, ub]) && a'[ubDH, ub] = a then event_abort ev_abort else
+         let ka:bitstring = mark in a,
+      !naDH ODHa(j<=nb) := 
+      	 let b':Z = b[j] in
+	 find u<=nb suchthat defined(kb[u],b[u]) && b' = b[u] then exp'(g, mult(b', a)) else 
+         if defined(ka) then exp'(g, mult(b', a)) else 
+	 let ka':bitstring = mark in
+         find vaDH <= naDH suchthat defined(b'[vaDH],ca[vaDH]) && b' = b'[vaDH] then ca[vaDH] else
+         find vbDH <= nbDH, vb <= nb suchthat defined(b[vb], a'[vbDH, vb], cb[vbDH, vb]) && b' = b[vb] && a = a'[vbDH, vb] then cb[vbDH, vb] else
+	 new ca: G; ca
+    ),
+    !nb new b:Z; (
+      OB() := exp'(g,b), 
+      Ob() := 
+         find ubDH <= nbDH suchthat defined(kb'[ubDH]) then event_abort ev_abort else
+	 find uaDH <= naDH, ua <= na suchthat defined(ka'[uaDH, ua], b'[uaDH, ua]) && b'[uaDH, ua] = b then event_abort ev_abort else
+         let kb:bitstring = mark in b,
+      !nbDH ODHb(j<=na) := 
+         let a':Z = a[j] in
+	 find u<=na suchthat defined(ka[u],a[u]) && a' = a[u] then exp'(g, mult(a', b)) else 
+         if defined(kb) then exp'(g, mult(a', b)) else 
+	 let kb':bitstring = mark in
+         find vbDH <= nbDH suchthat defined(a'[vbDH],cb[vbDH]) && a' = a'[vbDH] then cb[vbDH] else
+         find vaDH <= naDH, va <= na suchthat defined(a[va], b'[vaDH, va], ca[vaDH, va]) && a' = a[va] && b = b'[vaDH, va] then ca[vaDH, va] else
+	 new cb: G; cb
+    ).
+
+}
+
+(* Gap Diffie-Hellman 
+   G: type of group elements (must be "bounded" and "large", of cardinal 
+   a prime q), neutral element excluded (so |G| = q-1)
+   Z: type of exponents (must be "bounded" and "large", supposed to be 
+   {1, ..., q-1})
+
+   g: a generator of the group
+   exp: the exponentiation function
+   mult: the multiplication function for exponents, product modulo q in
+   {1, ..., q-1}, i.e. in the group (Z/qZ)*
+
+   pGDH: the probability of breaking the GDH assumption
+
+   The types G and Z and the probability pGDH must be declared before
+   this macro.  The functions g, exp, and mult are defined by this
+   macro. They must not be declared elsewhere, and they can be used
+   only after expanding the macro.
+
+*)
+
+define GDH(G, Z, g, exp, mult, pGDH) {
+
+fun exp(G,Z): G.
+fun exp'(G,Z): G.
+const g:G.
+
+fun mult(Z,Z): Z. 
+equation commut(mult).
+
+(* exponents multiply *)
+
+forall a:G, x:Z, y:Z;
+  exp(exp(a,x), y) = exp(a, mult(x,y)).
+forall a:G, x:Z, y:Z;
+  exp'(exp'(a,x), y) = exp'(a, mult(x,y)).
+
+(* injectivity *)
+
+forall x:Z, y:Z; (exp(g,x) = exp(g,y)) = (x = y).
+forall x:Z, y:Z; (exp'(g,x) = exp'(g,y)) = (x = y).
+
+(* collision between products *)
+
+collision new x1:Z; new x2:Z; new x3:Z; new x4:Z; 
+  mult(x1,x2) = mult(x3,x4) <=(1/|Z|)=> false. 
+
+collision new x1:Z; new x2:Z; 
+  mult(x1,x1) = mult(x2,x2) <=(1/|Z|)=> false. 
+
+forall x:Z, y:Z, y':Z; 
+  (mult(x,y) = mult(x,y')) = (y = y').
+
+(* replace a random group element with an exponentiation, and conversely *)
+
+param N, N'.
+
+equiv group_to_exp_strict(exp)
+      !N new X:G; (OX() := X, !N' OXm(m:Z) [useful_change] := exp(X,m))
+<=(0)=> [computational]
+      !N new x:Z; (OX() := exp(g,x), !N' OXm(m:Z) := exp(g,mult(x,m))).
+
+(* This equivalence is very general, apply it only manually, because
+   otherwise it might be applied too often.  The equivalence above is
+   particular case applied only when X is inside exp, and good for
+   automatic proofs. *)
+
+equiv group_to_exp(exp)
+      !N new X:G; OX() := X 
+<=(0)=> [manual, computational]    
+      !N new x:Z; OX() := exp(g,x).
+
+
+equiv exp_to_group(exp)
+      !N new x:Z; OX() := exp(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+equiv exp'_to_group(exp)
+      !N new x:Z; OX() := exp'(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+(* the GDH assumption
+    This equivalence says that, when exp(g,a[i]) and exp(g,b[j]) are known to the
+    adversary, the adversary can compute exp(g, mult(a[i], b[j])) only with
+    negligible probability, even in the presence of a DDH oracle
+    DDH(G,A,B,C) tells whether A = G^a, B = G^b, and C = G^{ab} for some a,b,
+    that is DDH(G,A,B,C) is (log_G(A) * log_G(B) = log_G(C)). *) 
+
+const mark: bitstring.
+
+param na, naDDH, naDDH1, naDDH2, naDDH3, naDDH4, naDDH5, naDDH6, naDDH7, naDDH8,
+      nb, nbDDH, nbDDH1, nbDDH2, nbDDH3, nbDDH4, nbDDH5, nbDDH6, nbDDH7, nbDDH8.
+
+equiv gdh(exp)
+    !na new a:Z; (
+      OA() := exp(g,a), 
+      Oa() [3] := a,
+      !naDDH1 ODDHa1(m:G, m':G) := m = exp(m', a),
+      !naDDH2 ODDHa2(m:G,m':G,j<=nb) := exp(m, b[j]) = exp(m',a),
+      !naDDH3 ODDHa3(m:G,m':G,j<=na) := exp(m, a[j]) = exp(m',a),
+      !naDDH4 ODDHa4(m:G,j'<=nb,j<=nb) := exp(m, b[j]) = exp(g,mult(b[j'],a)),
+      !naDDH5 ODDHa5(m:G,j'<=nb,j<=na) := exp(m, a[j]) = exp(g,mult(b[j'],a)),
+      !naDDH6 ODDHa6(m:G,j'<=na,j<=nb) := exp(m, b[j]) = exp(g,mult(a[j'],a)),
+      !naDDH7 ODDHa7(m:G,j'<=na,j<=na) := exp(m, a[j]) = exp(g,mult(a[j'],a)),
+      !naDDH ODDHa(m:G, j<=nb) [useful_change] := m = exp(g, mult(b[j], a)),
+      !naDDH8 ODDHa8(m:G,j<=na) [3] := m = exp(g,mult(a[j], a))
+    ),
+    !nb new b:Z; (
+      OB() := exp(g,b),
+      Ob() [3] := b,
+      !nbDDH1 ODDHb1(m:G, m':G) := m = exp(m', b),
+      !nbDDH2 ODDHb2(m:G,m':G,j<=nb) := exp(m, b[j]) = exp(m',b),
+      !nbDDH3 ODDHb3(m:G,m':G,j<=na) := exp(m, a[j]) = exp(m',b),
+      !nbDDH4 ODDHb4(m:G,j'<=nb,j<=nb) := exp(m, b[j]) = exp(g,mult(b[j'],b)),
+      !nbDDH5 ODDHb5(m:G,j'<=nb,j<=na) := exp(m, a[j]) = exp(g,mult(b[j'],b)),
+      !nbDDH6 ODDHb6(m:G,j'<=na,j<=nb) := exp(m, b[j]) = exp(g,mult(a[j'],b)),
+      !nbDDH7 ODDHb7(m:G,j'<=na,j<=na) := exp(m, a[j]) = exp(g,mult(a[j'],b)),
+      !nbDDH ODDHb(m:G, j<=na) := m = exp(g, mult(a[j], b)),
+      !nbDDH8 ODDHb8(m:G,j<=nb) [3] := m = exp(g,mult(b[j], b))
+    )
+<=((#ODDHa + #ODDHa1 + #ODDHb + #ODDHb1) * max(1, 7.4*#Oa) * max(1, 7.4*#Ob) *
+	   pGDH(time + (na + nb + #ODDHa + #ODDHa1 + #ODDHb + #ODDHb1) * time(exp),
+	   #ODDHa1 + #ODDHa2 + #ODDHa3 + #ODDHa4 + #ODDHa5 + #ODDHa6 + #ODDHa7 + #ODDHa8 +
+	   #ODDHb1 + #ODDHb2 + #ODDHb3 + #ODDHb4 + #ODDHb5 + #ODDHb6 + #ODDHb7 + #ODDHb8))=> [computational]
+    !na new a:Z [unchanged]; (
+      OA() := exp'(g,a), 
+      Oa() := let ka:bitstring = mark in a,
+      !naDDH1 ODDHa1(m:G, m':G) := if defined(ka) then m = exp'(m', a) else 
+      		  	   find u<=nb suchthat defined(b[u],kb[u]) && m' = exp'(g,b[u]) then m = exp'(m', a) else
+			   find u<=nb suchthat defined(b[u]) && m' = exp'(g,b[u]) then false else
+                               (* by CDH, if neither a nor b[u] are leaked, then m = exp(g, b[u]*a) is impossible *)
+			   m = exp'(m', a)
+			       (* GDH allows to compute m = exp(m',a) for any m and m', without leaking a, 
+			          as it is DDH(g, exp(g,a), m', m) *),
+      !naDDH2 ODDHa2(m:G,m':G,j<=nb) := exp'(m, b[j]) = exp'(m',a),
+      	   (* GDH allows to compute exp(m, b[j]) = exp(m',a) for any m and m', 
+	      without leaking a, as it is DDH(exp(g,a), exp(g,b[j]), m, m')
+	      Indeed, 
+ 	      D(exp(g,a),exp(g,b[j]),m,m') 
+      	        = (log_{g^a}(g^b[j]) * log_{g^a}(m) = log_{g^a}(m'))
+      		= (b[j]/a * log_g(m)/a = log_g(m')/a)
+      		= (b[j] * log_g(m) = a log_g(m'))
+      		= (m^b[j] = m'^a). *)
+      !naDDH3 ODDHa3(m:G,m':G,j<=na) := exp'(m, a[j]) = exp'(m',a),
+      	    (* Similar to ODDHa2 *)
+      !naDDH4 ODDHa4(m:G,j'<=nb,j<=nb) := exp'(m, b[j]) = exp'(g,mult(b[j'],a)),
+      !naDDH5 ODDHa5(m:G,j'<=nb,j<=na) := exp'(m, a[j]) = exp'(g,mult(b[j'],a)),
+      !naDDH6 ODDHa6(m:G,j'<=na,j<=nb) := exp'(m, b[j]) = exp'(g,mult(a[j'],a)),
+      !naDDH7 ODDHa7(m:G,j'<=na,j<=na) := exp'(m, a[j]) = exp'(g,mult(a[j'],a)),
+            (* ODDHa4..7 are particular cases of ODDHa2 or ODDHa3, with m' = exp(g, b[j'])
+	       or m' = exp(g, a[j']).
+	       We need to consider all these forms because CryptoVerif rewrites
+	       exp(exp(g,b[j']),a) into exp(g,mult(b[j'],a)), and it would not
+	       detect exp(g,mult(b[j'],a)) as an instance of exp(m',a). *)
+      !naDDH ODDHa(m:G, j<=nb) :=
+      	     find u<=nb suchthat defined(kb[u],b[u]) && b[j] = b[u] then m = exp'(g, mult(b[j], a)) else 
+             if defined(ka) then m = exp'(g, mult(b[j], a)) else false,
+	    (* ODDHa is a particular case of ODDHa1 in which can apply the CDH assumption,
+	       provided a and b[j] are not leaked. *)
+      !naDDH8 ODDHa8(m:G,j<=na) := m = exp'(g,mult(a[j], a))
+            (* ODDHa8 is a particular case of ODDHa1 in which we do not apply
+	       the CDH assumption, since we apply it between a's and b's *)
+    ),
+    !nb new b:Z [unchanged]; (
+      OB() := exp'(g,b), 
+      Ob() := let kb:bitstring = mark in b,
+      !nbDDH1 ODDHb1(m:G, m':G) := if defined(kb) then m = exp'(m', b) else 
+      		  	   find u<=na suchthat defined(a[u],ka[u]) && m' = exp'(g,a[u]) then m = exp'(m', b) else
+      		  	   find u<=na suchthat defined(a[u]) && m' = exp'(g,a[u]) then false else
+                               (* by CDH, if neither a nor b[u] are leaked, then m = exp(g, a[u]*b) is impossible *)
+			   m = exp'(m', b)
+			       (* GDH allows to compute m = exp(m',a) for any m and m', without leaking a *),
+      !nbDDH2 ODDHb2(m:G,m':G,j<=nb) := exp'(m, b[j]) = exp'(m',b),
+      !nbDDH3 ODDHb3(m:G,m':G,j<=na) := exp'(m, a[j]) = exp'(m',b),
+      !nbDDH4 ODDHb4(m:G,j'<=nb,j<=nb) := exp'(m, b[j]) = exp'(g,mult(b[j'],b)),
+      !nbDDH5 ODDHb5(m:G,j'<=nb,j<=na) := exp'(m, a[j]) = exp'(g,mult(b[j'],b)),
+      !nbDDH6 ODDHb6(m:G,j'<=na,j<=nb) := exp'(m, b[j]) = exp'(g,mult(a[j'],b)),
+      !nbDDH7 ODDHb7(m:G,j'<=na,j<=na) := exp'(m, a[j]) = exp'(g,mult(a[j'],b)),
+      !nbDDH ODDHb(m:G, j<=na) := find u<=na suchthat defined(ka[u],a[u]) && a[j] = a[u] then m = exp'(g, mult(a[j], b)) else 
+                            if defined(kb) then m = exp'(g, mult(a[j], b)) else false,
+      !nbDDH8 ODDHb8(m:G,j<=nb) := m = exp'(g,mult(b[j], b))
+    ).
+
+    (* We need to consider both forms m = exp(m', a) and m = exp(g,
+    mult(b[j], a)) in the equivalence, because, when m' is known to be
+    exp(g, b[j]), CryptoVerif is going to simplify m = exp(m', a) into
+    m = exp(g, mult(b[j], a)), and the procedure that tests whether a
+    term in the game matches a term in the equivalence would not
+    recognize that m = exp(g, mult(b[j], a)) in the game matches m =
+    exp(m', a) in the equivalence. *)
+
+}
+
+(* GDH_prime_order is a variant of GDH in which we have as additional
+   assumption that the group has prime order. It has the same 
+   interface as GDH. *)
+
+define GDH_prime_order(G, Z, g, exp, mult, pGDH) {
+
+fun exp(G,Z): G.
+fun exp'(G,Z): G.
+const g:G.
+
+fun mult(Z,Z): Z. 
+equation commut(mult).
+
+(* exponents multiply *)
+
+forall a:G, x:Z, y:Z;
+  exp(exp(a,x), y) = exp(a, mult(x,y)).
+forall a:G, x:Z, y:Z;
+  exp'(exp'(a,x), y) = exp'(a, mult(x,y)).
+
+(* injectivity *)
+
+forall x:Z, y:Z; (exp(g,x) = exp(g,y)) = (x = y).
+forall x:Z, y:Z; (exp'(g,x) = exp'(g,y)) = (x = y).
+
+(* When the group has prime order, 
+exp(x,y) = exp(x',y) implies y = y' (provided y is not a multiple
+of this prime; if y is a correctly generated secret key, that cannot
+happen) *)
+
+forall x:G, x':G, y:Z; (exp(x,y) = exp(x',y)) = (x = x').
+forall x:G, x':Z, y:Z; (exp(x,y) = exp(g, mult(x',y))) = (x = exp(g,x')).
+
+forall x:G, y:Z, y':Z; (exp(x,y) = exp(x,y')) = (y = y').
+
+(* collision between products *)
+
+collision new x1:Z; new x2:Z; new x3:Z; new x4:Z; 
+  mult(x1,x2) = mult(x3,x4) <=(1/|Z|)=> false. 
+
+collision new x1:Z; new x2:Z; 
+  mult(x1,x1) = mult(x2,x2) <=(1/|Z|)=> false. 
+
+forall x:Z, y:Z, y':Z; 
+  (mult(x,y) = mult(x,y')) = (y = y').
+
+(* replace a random group element with an exponentiation, and conversely *)
+
+param N, N'.
+
+equiv group_to_exp_strict(exp)
+      !N new X:G; (OX() := X, !N' OXm(m:Z) [useful_change] := exp(X,m))
+<=(0)=> [computational]
+      !N new x:Z; (OX() := exp(g,x), !N' OXm(m:Z) := exp(g,mult(x,m))).
+
+(* This equivalence is very general, apply it only manually, because
+   otherwise it might be applied too often.  The equivalence above is
+   particular case applied only when X is inside exp, and good for
+   automatic proofs. *)
+
+equiv group_to_exp(exp)
+      !N new X:G; OX() := X 
+<=(0)=> [manual, computational]    
+      !N new x:Z; OX() := exp(g,x).
+
+
+equiv exp_to_group(exp)
+      !N new x:Z; OX() := exp(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+equiv exp'_to_group(exp)
+      !N new x:Z; OX() := exp'(g,x)
+<=(0)=> [computational]
+      !N new X:G; OX() := X.
+
+(* the GDH assumption
+    This equivalence says that, when exp(g,a[i]) and exp(g,b[j]) are known to the
+    adversary, the adversary can compute exp(g, mult(a[i], b[j])) only with
+    negligible probability, even in the presence of a DDH oracle
+    DDH(G,A,B,C) tells whether A = G^a, B = G^b, and C = G^{ab} for some a,b,
+    that is DDH(G,A,B,C) is (log_G(A) * log_G(B) = log_G(C)). *) 
+
+const mark: bitstring.
+
+param na, naDDH, naDDH1, naDDH2, naDDH3, naDDH4, naDDH5, naDDH6, naDDH7, naDDH8,
+      nb, nbDDH, nbDDH1, nbDDH2, nbDDH3, nbDDH4, nbDDH5, nbDDH6, nbDDH7, nbDDH8.
+
+equiv gdh(exp)
+    !na new a:Z; (
+      OA() := exp(g,a), 
+      Oa() [3] := a,
+      !naDDH1 ODDHa1(m:G, m':G) := m = exp(m', a),
+      !naDDH2 ODDHa2(m:G,m':G,j<=nb) := exp(m, b[j]) = exp(m',a),
+      !naDDH3 ODDHa3(m:G,m':G,j<=na) := exp(m, a[j]) = exp(m',a),
+      !naDDH4 ODDHa4(m:G,j'<=nb,j<=nb) [useful_change] := exp(m, b[j]) = exp(g,mult(b[j'],a)),
+      !naDDH5 ODDHa5(m:G,j'<=nb,j<=na) [useful_change] := exp(m, a[j]) = exp(g,mult(b[j'],a)),
+      !naDDH6 ODDHa6(m:G,j'<=na,j<=nb) := exp(m, b[j]) = exp(g,mult(a[j'],a)),
+      !naDDH7 ODDHa7(m:G,j'<=na,j<=na) := exp(m, a[j]) = exp(g,mult(a[j'],a)),
+      !naDDH ODDHa(m:G, j<=nb) [useful_change] := m = exp(g, mult(b[j], a)),
+      !naDDH8 ODDHa8(m:G,j<=na) [3] := m = exp(g,mult(a[j], a))
+    ),
+    !nb new b:Z; (
+      OB() := exp(g,b),
+      Ob() [3] := b,
+      !nbDDH1 ODDHb1(m:G, m':G) := m = exp(m', b),
+      !nbDDH2 ODDHb2(m:G,m':G,j<=nb) := exp(m, b[j]) = exp(m',b),
+      !nbDDH3 ODDHb3(m:G,m':G,j<=na) := exp(m, a[j]) = exp(m',b),
+      !nbDDH4 ODDHb4(m:G,j'<=nb,j<=nb) := exp(m, b[j]) = exp(g,mult(b[j'],b)),
+      !nbDDH5 ODDHb5(m:G,j'<=nb,j<=na) := exp(m, a[j]) = exp(g,mult(b[j'],b)),
+      !nbDDH6 ODDHb6(m:G,j'<=na,j<=nb) := exp(m, b[j]) = exp(g,mult(a[j'],b)),
+      !nbDDH7 ODDHb7(m:G,j'<=na,j<=na) := exp(m, a[j]) = exp(g,mult(a[j'],b)),
+      !nbDDH ODDHb(m:G, j<=na) := m = exp(g, mult(a[j], b)),
+      !nbDDH8 ODDHb8(m:G,j<=nb) [3] := m = exp(g,mult(b[j], b))
+    )
+<=((#ODDHa + #ODDHa1 + #ODDHa4 + #ODDHa5 + #ODDHb + #ODDHb1 + #ODDHb6 + #ODDHb7) *
+	   max(1, 7.4*#Oa) * max(1, 7.4*#Ob) *
+	   pGDH(time + (na + nb + #ODDHa + #ODDHa1 + #ODDHb + #ODDHb1) * time(exp),
+	   #ODDHa1 + #ODDHa2 + #ODDHa3 + #ODDHa4 + #ODDHa5 + #ODDHa6 + #ODDHa7 + #ODDHa8 +
+	   #ODDHb1 + #ODDHb2 + #ODDHb3 + #ODDHb4 + #ODDHb5 + #ODDHb6 + #ODDHb7 + #ODDHb8))=> [computational]
+    !na new a:Z [unchanged]; (
+      OA() := exp'(g,a), 
+      Oa() := let ka:bitstring = mark in a,
+      !naDDH1 ODDHa1(m:G, m':G) := if defined(ka) then m = exp'(m', a) else 
+      		  	   find u<=nb suchthat defined(b[u],kb[u]) && m' = exp'(g,b[u]) then m = exp'(m', a) else
+			   find u<=nb suchthat defined(b[u]) && m' = exp'(g,b[u]) then false else
+                               (* by CDH, if neither a nor b[u] are leaked, then m = exp(g, b[u]*a) is impossible *)
+			   m = exp'(m', a)
+			       (* GDH allows to compute m = exp(m',a) for any m and m', without leaking a, 
+			          as it is DDH(g, exp(g,a), m', m) *),
+      !naDDH2 ODDHa2(m:G,m':G,j<=nb) := exp'(m, b[j]) = exp'(m',a),
+      	   (* GDH allows to compute exp(m, b[j]) = exp(m',a) for any m and m', 
+	      without leaking a, as it is DDH(exp(g,a), exp(g,b[j]), m, m')
+	      Indeed, 
+ 	      D(exp(g,a),exp(g,b[j]),m,m') 
+      	        = (log_{g^a}(g^b[j]) * log_{g^a}(m) = log_{g^a}(m'))
+      		= (b[j]/a * log_g(m)/a = log_g(m')/a)
+      		= (b[j] * log_g(m) = a log_g(m'))
+      		= (m^b[j] = m'^a). *)
+      !naDDH3 ODDHa3(m:G,m':G,j<=na) := exp'(m, a[j]) = exp'(m',a),
+      	    (* Similar to ODDHa2 *)
+      !naDDH4 ODDHa4(m:G,j'<=nb,j<=nb) :=
+      	      find u<=nb suchthat defined(kb[u],b[u]) && b[j'] = b[u] then exp'(m, b[j]) = exp'(g,mult(b[j'],a)) else
+	      if defined(ka) then exp'(m, b[j]) = exp'(g,mult(b[j'],a)) else
+      	      b[j] = b[j'] && m = exp'(g,a),
+	    (* GDH always allows to compute exp(m, b[j]) = exp(g,mult(b[j'],a))
+	       as a particular case of ODDHa2.
+	       When a or b[j'] is leaked, that all we use and we keep the value
+	       that occurs in the left-hand side exp'(m, b[j]) = exp'(g,mult(b[j'],a)).
+	       Otherwise, we distinguish two cases:
+	       - When b[j] = b[j'], the equality m^b[j] = (g^a)^b[j'] reduces
+	         to m = g^a because the group has prime order, so we can invert b[j].
+	       - Otherwise, we apply the CDH assumption considering an adversary
+	         that knows b[j] and computes exp(m, b[j]). This adversary cannot
+	         compute exp(g,mult(b[j'],a)) by CDH, so the equality 
+	         exp(m, b[j]) = exp(g,mult(b[j'],a)) is false in this case.
+	       Hence, the equality exp(m, b[j]) = exp(g,mult(b[j'],a))
+	       reduces to b[j] = b[j'] && m = exp'(g,a). *)
+      !naDDH5 ODDHa5(m:G,j'<=nb,j<=na) :=
+      	      find u<=nb suchthat defined(kb[u],b[u]) && b[j'] = b[u] then exp'(m, a[j]) = exp'(g,mult(b[j'],a)) else
+	      if defined(ka) then exp'(m, a[j]) = exp'(g,mult(b[j'],a)) else
+      	      a[j] = a && m = exp'(g,b[j']),
+	      (* This case is similar to ODDHa4. *)
+      !naDDH6 ODDHa6(m:G,j'<=na,j<=nb) := exp'(m, b[j]) = exp'(g,mult(a[j'],a)),
+      !naDDH7 ODDHa7(m:G,j'<=na,j<=na) := exp'(m, a[j]) = exp'(g,mult(a[j'],a)),
+            (* ODDHa6..7 are particular cases of ODDHa2 or ODDHa3, with m' = exp(g, b[j'])
+	       or m' = exp(g, a[j']).
+	       We need to consider all these forms because CryptoVerif rewrites
+	       exp(exp(g,b[j']),a) into exp(g,mult(b[j'],a)), and it would not
+	       detect exp(g,mult(b[j'],a)) as an instance of exp(m',a). *)
+      !naDDH ODDHa(m:G, j<=nb) :=
+      	     find u<=nb suchthat defined(kb[u],b[u]) && b[j] = b[u] then m = exp'(g, mult(b[j], a)) else 
+             if defined(ka) then m = exp'(g, mult(b[j], a)) else false,
+	    (* ODDHa is a particular case of ODDHa1 in which can apply the CDH assumption,
+	       provided a and b[j] are not leaked. *)
+      !naDDH8 ODDHa8(m:G,j<=na) := m = exp'(g,mult(a[j], a))
+            (* ODDHa8 is a particular case of ODDHa1 in which we do not apply
+	       the CDH assumption, since we apply it between a's and b's *)
+    ),
+    !nb new b:Z [unchanged]; (
+      OB() := exp'(g,b), 
+      Ob() := let kb:bitstring = mark in b,
+      !nbDDH1 ODDHb1(m:G, m':G) := if defined(kb) then m = exp'(m', b) else 
+      		  	   find u<=na suchthat defined(a[u],ka[u]) && m' = exp'(g,a[u]) then m = exp'(m', b) else
+      		  	   find u<=na suchthat defined(a[u]) && m' = exp'(g,a[u]) then false else
+                               (* by CDH, if neither a nor b[u] are leaked, then m = exp(g, a[u]*b) is impossible *)
+			   m = exp'(m', b)
+			       (* GDH allows to compute m = exp(m',a) for any m and m', without leaking a *),
+      !nbDDH2 ODDHb2(m:G,m':G,j<=nb) := exp'(m, b[j]) = exp'(m',b),
+      !nbDDH3 ODDHb3(m:G,m':G,j<=na) := exp'(m, a[j]) = exp'(m',b),
+      !nbDDH4 ODDHb4(m:G,j'<=nb,j<=nb) := exp'(m, b[j]) = exp'(g,mult(b[j'],b)),
+      !nbDDH5 ODDHb5(m:G,j'<=nb,j<=na) := exp'(m, a[j]) = exp'(g,mult(b[j'],b)),
+      !nbDDH6 ODDHb6(m:G,j'<=na,j<=nb) :=
+      	      find u<=na suchthat defined(ka[u],a[u]) && a[j'] = a[u] then exp'(m, b[j]) = exp'(g,mult(a[j'],b)) else
+	      if defined(kb) then exp'(m, b[j]) = exp'(g,mult(a[j'],b)) else
+      	      b[j] = b && m = exp'(g,a[j']),
+      !nbDDH7 ODDHb7(m:G,j'<=na,j<=na) :=
+      	      find u<=na suchthat defined(ka[u],a[u]) && a[j'] = a[u] then exp'(m, a[j]) = exp'(g,mult(a[j'],b)) else
+	      if defined(kb) then exp'(m, a[j]) = exp'(g,mult(a[j'],b)) else
+      	      a[j] = a[j'] && m = exp'(g,b),
+      !nbDDH ODDHb(m:G, j<=na) := find u<=na suchthat defined(ka[u],a[u]) && a[j] = a[u] then m = exp'(g, mult(a[j], b)) else 
+                            if defined(kb) then m = exp'(g, mult(a[j], b)) else false,
+      !nbDDH8 ODDHb8(m:G,j<=nb) := m = exp'(g,mult(b[j], b))
+    ).
+
+    (* We need to consider both forms m = exp(m', a) and m = exp(g,
+    mult(b[j], a)) in the equivalence, because, when m' is known to be
+    exp(g, b[j]), CryptoVerif is going to simplify m = exp(m', a) into
+    m = exp(g, mult(b[j], a)), and the procedure that tests whether a
+    term in the game matches a term in the equivalence would not
+    recognize that m = exp(g, mult(b[j], a)) in the game matches m =
+    exp(m', a) in the equivalence. *)
+
+}
+
+(********************************* Miscellaneous ***************************)
+
+(* One-way trapdoor permutation 
+   seed: type of random seeds to generate keys, must be "bounded", typically "fixed"
+   pkey: type of public keys, must be "bounded"
+   skey: type of secret keys, must be "bounded"
+   D: type of the input and output of the permutation, must be "bounded", typically "fixed"
+
+   pkgen: public-key generation function
+   skgen: secret-key generation function
+   f: the permutation (taking as argument the public key)
+   invf: the inverse permutation of f (taking as argument the secret key,
+         i.e. the trapdoor)
+
+   POW(t): probability of breaking the one-wayness property
+   in time t, for one key and one permuted value.
+
+   The types seed, pkey, skey, D, and the probability POW must be
+   declared before this macro. The functions pkgen, skgen, f, invf
+   are defined by this macro. They must not be declared elsewhere, and
+   they can be used only after expanding the macro. 
+*)
+
+define OW_trapdoor_perm(seed, pkey, skey, D, pkgen, skgen, f, invf, POW) {
+
+param nK, nf, n2.
+
+const mark:bitstring.
+fun pkgen(seed):pkey.
+fun pkgen'(seed):pkey.
+fun skgen(seed):skey.
+fun f(pkey, D):D.
+fun f'(pkey, D):D.
+fun invf(skey, D):D.
+
+(* invf is the inverse of f *)
+
+forall r:seed, x:D; invf(skgen(r), f(pkgen(r), x)) = x.
+
+(* f is the inverse of invf *)
+
+forall r:seed, x:D; f(pkgen(r), invf(skgen(r), x)) = x.
+
+(* Injectivity of f *)
+
+forall k:pkey, x:D, x':D; (f(k,x) = f(k,x')) = (x = x').
+forall k:pkey, x:D, x':D; (f'(k,x) = f'(k,x')) = (x = x').
+
+(* injectivity of invf *)
+
+forall k:skey, x:D, x':D; (invf(k,x) = invf(k,x')) = (x = x').
+
+(* f/invf are inverse permutations; use this to remove some
+   occurrences of invf in equality tests *)
+
+forall r:seed, x:D, x':D; 
+	(x' = invf(skgen(r),x)) = (f(pkgen(r),x') = x).
+
+(* We can permute the distribution, for uniformly distributed random
+   numbers x. Do that only when x is used in invf(skgen(r),x) *)
+
+equiv remove_invf(f)
+      !nK new r: seed; (
+	Opk() := pkgen(r),
+	!nf new x:D; (Oant() := invf(skgen(r),x), Oim() := x))
+<=(0)=> [computational]
+      !nK new r: seed [unchanged]; (
+	Opk() := pkgen(r),
+	!nf new x:D; (Oant() := x, Oim() := f(pkgen(r), x))).
+
+(* One-wayness *)
+
+equiv ow(f)
+      !nK new r: seed; (
+	Opk() := pkgen(r),
+	!nf new x: D; (Oy() := f(pkgen(r), x),
+		       !n2 Oeq(x':D) := x' = x,
+		       Ox() := x))
+<=(nK * nf * POW(time + (nK-1) * time(pkgen) + (#Oy-1) * time(f)))=> [computational]
+      !nK new r: seed [unchanged]; (
+	Opk() := pkgen'(r),
+	!nf new x: D [unchanged]; (Oy() := f'(pkgen'(r), x),
+		       !n2 Oeq(x':D) := if defined(k) then x' = x else false,
+		       Ox() := let k:bitstring = mark in x)).
+
+}
+
+(* One-way trapdoor permutation, with random self-reducibility. 
+   Same as above, but with a smaller probability of attack
+*)
+
+define OW_trapdoor_perm_RSR(seed, pkey, skey, D, pkgen, skgen, f, invf, POW) {
+
+param nK, nf, n2.
+
+const mark:bitstring.
+fun pkgen(seed):pkey.
+fun pkgen'(seed):pkey.
+fun skgen(seed):skey.
+fun f(pkey, D):D.
+fun f'(pkey, D):D.
+fun invf(skey, D):D.
+
+(* invf is the inverse of f *)
+
+forall r:seed, x:D; invf(skgen(r), f(pkgen(r), x)) = x.
+
+(* f is the inverse of invf *)
+
+forall r:seed, x:D; f(pkgen(r), invf(skgen(r), x)) = x.
+
+(* Injectivity of f *)
+
+forall k:pkey, x:D, x':D; (f(k,x) = f(k,x')) = (x = x').
+forall k:pkey, x:D, x':D; (f'(k,x) = f'(k,x')) = (x = x').
+
+(* injectivity of invf *)
+
+forall k:skey, x:D, x':D; (invf(k,x) = invf(k,x')) = (x = x').
+
+(* f/invf are inverse permutations; use this to remove some
+   occurrences of invf in equality tests *)
+
+forall r:seed, x:D, x':D; 
+	(x' = invf(skgen(r),x)) = (f(pkgen(r),x') = x).
+
+(* We can permute the distribution, for uniformly distributed random
+   numbers x. Do that only when x is used in invf(skgen(r),x) *)
+
+equiv remove_invf(f)
+      !nK new r: seed; (
+	Opk() := pkgen(r),
+	!nf new x:D; (Oant() := invf(skgen(r),x), Oim() := x))
+<=(0)=> [computational]
+      !nK new r: seed [unchanged]; (
+	Opk() := pkgen(r),
+	!nf new x:D; (Oant() := x, Oim() := f(pkgen(r), x))).
+
+(* One-wayness *)
+
+equiv ow_rsr(f)
+      !nK new r: seed; (
+	Opk() := pkgen(r),
+	!nf new x: D; (Oy() := f(pkgen(r), x),
+		       !n2 Oeq(x':D) := x' = x,
+		       Ox() := x))
+<=(max(nK, 4 * #Ox) * POW(time + (nK-1) * time(pkgen) + (#Oy-1) * time(f)))=> [computational]
+      !nK new r: seed [unchanged]; (
+	Opk() := pkgen'(r),
+	!nf new x: D [unchanged]; (Oy() := f'(pkgen'(r), x),
+		       !n2 Oeq(x':D) := if defined(k) then x' = x else false,
+		       Ox() := let k:bitstring = mark in x)).
+
+}
+
+(* Set partial-domain one-way trapdoor permutation 
+   seed: type of random seeds to generate keys, must be "bounded", typically "fixed"
+   pkey: type of public keys, must be "bounded"
+   skey: type of secret keys, must be "bounded"
+   D: type of the input and output of the permutation, must be "bounded", typically "fixed"
+   The domain D consists of the concatenation of bitstrings in Dow and Dr.
+   Dow is the set of sub-bitstrings of D on which one-wayness holds (it is difficult to compute the
+   random element x of Dow knowing f(pk, concat(x,y)) where y is a random element of Dr).
+   Dow and Dr must be "bounded", typically "fixed".
+
+   pkgen: public-key generation function
+   skgen: secret-key generation function
+   f: the permutation (taking as argument the public key)
+   invf: the inverse permutation of f (taking as argument the secret key,
+         i.e. the trapdoor)
+   concat(Dow, Dr):D is bitstring concatenation
+
+   P_PD_OW(t,l): probability of breaking the set partial-domain one-wayness property
+   in time t, for one key, one permuted value, and l tries.
+
+   The types seed, pkey, skey, D, Dow, Dr and the probability P_PD_OW must be
+   declared before this macro. The functions pkgen, skgen, f, invf, concat
+   are defined by this macro. They must not be declared elsewhere, and
+   they can be used only after expanding the macro. 
+*)
+
+define set_PD_OW_trapdoor_perm(seed, pkey, skey, D, Dow, Dr, pkgen, skgen, f, invf, concat, P_PD_OW) {
+
+param nK, nF, n1.
+
+const mark:bitstring.
+fun pkgen(seed):pkey.
+fun pkgen'(seed):pkey.
+fun skgen(seed):skey.
+fun f(pkey, D):D.
+fun f'(pkey, D):D.
+fun invf(skey, D):D.
+fun concat(Dow,Dr):D [compos].
+
+(* invf is the inverse of f *)
+
+forall r:seed, x:D; invf(skgen(r), f(pkgen(r), x)) = x.
+
+(* f is the inverse of invf *)
+
+forall r:seed, x:D; f(pkgen(r), invf(skgen(r), x)) = x.
+
+(* Injectivity of f *)
+
+forall k:pkey, x:D, x':D; (f(k,x) = f(k,x')) = (x = x').
+forall k:pkey, x:D, x':D; (f'(k,x) = f'(k,x')) = (x = x').
+
+(* injectivity of invf *)
+
+forall k:skey, x:D, x':D; (invf(k,x) = invf(k,x')) = (x = x').
+
+(* f/invf are inverse permutations; use this to remove some
+   occurrences of invf in equality tests *)
+
+forall r:seed, x:D, x':D; 
+	(x' = invf(skgen(r),x)) = (f(pkgen(r),x') = x).
+
+(* We can permute the distribution, for uniformly distributed random
+   numbers x. Do that only when x is used in invf(skgen(r),x) *)
+
+equiv remove_invf(f)
+      !nK new r: seed; (
+	Opk() := pkgen(r),
+	!nF new x: D; 
+		(Oant() := invf(skgen(r),x),
+	         Oim() := x))
+<=(0)=> [computational]
+      !nK new r: seed [unchanged]; (
+	Opk() := pkgen(r),
+	!nF new x: D; 
+		(Oant() := x,
+                 Oim() := f(pkgen(r), x))).
+
+(* One-wayness *)
+
+equiv pd_ow(f)
+      !nK new r: seed; (
+	Opk() := pkgen(r),
+	!nF new xow: Dow; new xr: Dr; 
+		(Oy() := f(pkgen(r), concat(xow, xr)),
+		 !n1 Oeq(xow' : Dow) := (xow' = xow),
+		 Oxow() := xow,
+		 Oxr() := xr))
+<=(nK * nF * P_PD_OW(time + (nK-1) * time(pkgen) + (#Oy-1) * time(f), n1))=> [computational]
+      !nK new r: seed [unchanged]; (
+	Opk() := pkgen'(r),
+	!nF new xow: Dow [unchanged]; new xr: Dr [unchanged]; 
+		(Oy() := f'(pkgen'(r), concat(xow, xr)),
+		 !n1 Oeq(xow':Dow) := 
+	           if defined(kow) then xow' = xow else 
+		   if defined(kr) then xow' = xow else false,
+		 Oxow() := let kow:bitstring = mark in xow,
+		 Oxr() := let kr:bitstring = mark in xr)).
+
+}
+
+(* Pseudo random function (PRF) 
+   keyseed: type of key seeds, must be "bounded" (to be able to generate random numbers from it), typically "fixed" and "large".
+   key: type of keys, must be "bounded"
+   input: type of the input of the PRF.
+   output: type of the output of the PRF, must be "bounded", typically "fixed".
+
+   kgen: key generation function 
+   f: PRF function
+
+   Pprf(t, N, l): probability of breaking the PRF property
+   in time t, for one key, N queries to the PRF of length at most l.
+
+   The types keyseed, key, input, output and the probability Pprf must
+   be declared before this macro is expanded. The functions kgen and f
+   are declared by this macro. They must not be declared elsewhere,
+   and they can be used only after expanding the macro.
+
+*)
+
+define PRF(keyseed, key, input, output, kgen, f, Pprf) {
+
+param N, N2, N3.
+
+fun f(key, input): output.
+fun kgen(keyseed):key.
+
+equiv prf(f)
+       !N3 new r: keyseed; !N Of(x:input) := f(kgen(r), x)
+     <=(N3 * Pprf(time + (N3-1)*(time(kgen) + N * time(f, maxlength(x))), N, maxlength(x)))=>
+       !N3 new r: keyseed; !N Of(x:input) :=
+		find[unique] j<=N suchthat defined(x[j],r2[j]) && x = x[j] then r2[j] 
+		else new r2: output; r2.
+
+}
+
+(* Xor
+   D: domain on which xor applies 
+   xor: the exclusive or function
+   zero: the neutral element
+
+   The type D must be declared before this macro is expanded. The
+   function xor and the constant zero are declared by this macro. They
+   must not be declared elsewhere, and they can be used only after
+   expanding the macro.
+ *)
+
+define Xor(D, xor, zero) {
+
+param nx.
+
+fun xor(D,D): D.
+const zero: D.
+equation ACUN(xor,zero).
+
+(* Xor is a one-time pad *)
+
+equiv remove_xor(xor)
+      !nx new a:D; Oxor(x:D) := xor(a,x)
+      <=(0)=> [computational]
+      !nx new a:D; Oxor(x:D) := a.
+
+}
+(* SUF-CMA MAC *)
+
+define SUF_CMA_mac_nokgen(mkey, macinput, macres, mac, check, Pmac) {
+
+fun mac(mkey, macinput):macres.
+fun check(mkey, macinput, macres): bool.
+
+fun mac2(mkey, macinput):macres.
+
+forall m:macinput, k:mkey;
+	check(k, m, mac(k, m)).
+
+forall m:macinput, k:mkey, m':macres;
+	(mac(k,m) = m') = check(k, m, m').
+
+param N, N2, N3.
+
+equiv suf_cma(mac)
+      ! N3 new k: mkey;(
+	 !N Omac(x: macinput) := mac(k, x),
+	 !N2 Ocheck(m: macinput, ma: macres) := check(k, m, ma))
+     <=(N3 * Pmac(time + (N3-1)*(N*time(mac,maxlength(x)) + N2*time(check,maxlength(m),maxlength(ma))), N, N2, max(maxlength(x), maxlength(m))))=> [computational]
+      ! N3 new k: mkey [unchanged];(
+	 !N Omac(x: macinput) := let ma2:macres = mac2(k, x) in ma2,
+	 !N2 Ocheck(m: macinput, ma: macres) := 
+	    find j <= N suchthat defined(x[j], ma2[j]) && (m = x[j]) && ma = ma2[j] then true else false).
+
+}
+
+(* UF-CMA signatures *)
+
+define UF_CMA_signature_key_first(keyseed, pkey, skey, signinput, signature, seed, skgen, pkgen, sign, check, Psign, Psigncoll) {
+
+const mark: bitstring.
+
+fun sign(skey, signinput, seed): signature.
+fun skgen(keyseed):skey.
+fun pkgen(keyseed):pkey.
+fun check(pkey, signinput, signature): bool.
+
+fun sign2(skey, signinput, seed): signature.
+fun skgen2(keyseed):skey.
+fun pkgen2(keyseed):pkey.
+fun check2(pkey, signinput, signature): bool.
+
+forall m:signinput, r:keyseed, r2:seed; 
+	check(pkgen(r), m, sign(skgen(r), m, r2)) = true.
+forall m:signinput, r:keyseed, r2:seed; 
+	check2(pkgen2(r), m, sign2(skgen2(r), m, r2)) = true.
+
+param N, N2, N3, N4.
+
+equiv uf_cma(sign)
+       !N3 new r: keyseed; (Opk() [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) := sign(skgen(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) := check(pkgen(r), m1, si1)),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(y, m, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m1), maxlength(m)), max(maxlength(si1), maxlength(si))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign2(skgen2(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check2(pkgen2(r), m1, si1) then true else false),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k]) && y = pkgen2(r[k]) && m = x[j,k] && check2(y, m, si) then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(y,m,si).
+
+equiv uf_cma_corrupt(sign)
+       !N3 new r: keyseed; (Opk() [useful_change] [2] := pkgen(r),
+			    !N2 new r2: seed; Osign(x: signinput) [useful_change] := sign(skgen(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) [useful_change] := check(pkgen(r), m1, si1),
+			    Ocorrupt() [10] := r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) [3] := check(y, m, si) [all]
+     <=(N3 * Psign(time + (N4+N-1) * time(check, max(maxlength(m1), maxlength(m)), max(maxlength(si1), maxlength(si))) + (N3-1)*(time(pkgen) + time(skgen) + N2 * time(sign, maxlength(x)) + N * time(check, maxlength(m1), maxlength(si1))), N2, maxlength(x)))=> [manual,computational]
+       !N3 new r: keyseed [unchanged]; 
+       	       	  	   (Opk() := pkgen2(r),
+			    !N2 new r2: seed [unchanged]; Osign(x: signinput) := sign2(skgen2(r), x, r2),
+			    !N Ocheck(m1: signinput, si1:signature) :=
+			      if defined(corrupt) then check2(pkgen2(r), m1, si1) else
+                              find j <= N2 suchthat defined(x[j]) && m1 = x[j] && check2(pkgen2(r), m1, si1) then true else false,
+			    Ocorrupt() := let corrupt: bitstring = mark in r),
+       !N4 Ocheck2(m: signinput, y: pkey, si: signature) :=
+		find k <= N3 suchthat defined(r[k],corrupt[k]) && y = pkgen2(r[k]) then check2(y, m, si) else
+		find j <= N2, k <= N3 suchthat defined(x[j,k],r[k]) && y = pkgen2(r[k]) && m = x[j,k] && check2(y, m, si) then true else
+		find k <= N3 suchthat defined(r[k]) && y = pkgen2(r[k]) then false else
+		check(y,m,si).
+
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	pkgen2(r1) = pkgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen(r1) = skgen2(r2) <=(Psigncoll)=> false.
+collision new r1:keyseed; new r2:keyseed; 
+	skgen2(r1) = skgen2(r2) <=(Psigncoll)=> false.
+
+}

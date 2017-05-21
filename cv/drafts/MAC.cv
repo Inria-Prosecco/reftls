@@ -1,0 +1,60 @@
+(* Trying to prove that a PRF composed with a collision-resistant hash
+   is an SUF-CMA MAC. Does not work. *)
+
+type key [large, fixed].
+type mac_t [large, fixed].
+type hash.
+
+set interactiveMode = true.
+
+(* HMAC is a PRF *)
+
+fun HMAC(key, hash): mac_t.
+
+proba Pprf.
+
+param N, N3.
+
+equiv prf(HMAC)
+       !N3 new r: key; !N O(x:hash) := HMAC(r,x)
+     <=(N3 * (2/|key| + Pprf(time + (N3-1)* N * time(HMAC, maxlength(x)), N, maxlength(x))))=>
+       !N3 !N O(x: hash) :=
+	        find[unique] j<=N suchthat defined(x[j],r2[j]) && x = x[j] then r2[j] 
+		else new r2: mac_t; r2.
+
+(* Hash is a collision resistant hash function *)
+
+type hashkey [large,fixed].
+proba Phash.
+expand CollisionResistant_hash(hashkey, bitstring, hash, Hash, Phash).
+
+(* Define a mac primitive that is the composition of HMAC and Hash *)
+
+letfun mac(hk: hashkey, k: key, m: bitstring) = 
+       HMAC(k, Hash(hk, m)).
+
+(* Prove equivalence between processLeft and processRight *)
+
+query secret b.
+
+channel start, c1, c2, c3, c4, c5.
+
+param N'.
+
+let processLeft = 
+      !N3 in(c1, ()); new k: key;out(c1, ()); (
+	 (!N in(c2, x0: bitstring); out(c2, mac(hk, k, x0))) |
+	 (!N' in(c3, (m0: bitstring, ma0: mac_t)); out(c3, ma0 = mac(hk, k, m0)))).
+
+let processRight = 
+      !N3 in(c1, ()); new k: key;out(c1, ()); (
+	 (!N in(c2, x: bitstring); let ma':mac_t = mac(hk, k, x) in out(c2, ma')) |
+	 (!N' in(c3, (m: bitstring, ma: mac_t)); 
+	    find j <= N suchthat defined(x[j], ma'[j]) && (m = x[j]) && ma = ma'[j] then out(c3,true) else out(c3, false))).
+
+process
+	in(start, ());
+	new b: bool;
+	new hk: hashkey; (* This key models the choice of the collision resistant hash function *)
+	if b then out(start, ()); processLeft
+	     else out(start, ()); processRight

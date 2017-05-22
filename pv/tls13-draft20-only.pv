@@ -1,0 +1,133 @@
+(* Following secrecy queries should fail *)
+query cr:random, sr:random, psk:preSharedKey, p:pubkey, ms:bitstring, aek:ae_key, cb:bitstring, cr':random, sr':random, v:version, e:element;
+      event(ClientAEKeyLeaked(TLS13,cr,sr,psk,p)) ==>
+      (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))).
+
+query cr:random, sr:random, psk:preSharedKey, p:pubkey, ms:bitstring, aek:ae_key, cb:bitstring, cr':random, sr':random, v:version, e:element;
+      event(ClientAEKeyLeaked(TLS13,cr,sr,psk,p)) ==>
+      (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
+
+query cr:random, sr:random, psk:preSharedKey, p:pubkey, ms:bitstring, aek:ae_key, cb:bitstring, cr':random, sr':random, v:version, e:element;
+      event(ClientAEKeyLeaked(TLS13,cr,sr,psk,p)) ==>
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||     
+      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
+
+(* Following authentication queries should fail *)
+query cr:random, sr:random, cr':random, sr':random,
+      psk:preSharedKey,p:pubkey, e:element,
+      o:params, m:params,  
+      ck:ae_key,sk:ae_key,ms:bitstring,cb:bitstring;
+      inj-event(ClientFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb,ms)) ==>
+      inj-event(PreServerFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb)) ||
+      (event(WeakOrCompromisedKey(p)) &&  (psk = NoPSK || event(CompromisedPreSharedKey(psk)))).
+
+query cr:random, sr:random, cr':random, sr':random,
+      psk:preSharedKey,p:pubkey, e:element,
+      o:params, m:params,  
+      ck:ae_key,sk:ae_key,ms:bitstring,cb:bitstring;
+      inj-event(ClientFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb,ms)) ==>
+      inj-event(PreServerFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb)) ||
+      (event(WeakOrCompromisedKey(p)) &&  (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))).
+
+query cr:random, sr:random, cr':random, sr':random,
+      psk:preSharedKey,p:pubkey, e:element,
+      o:params, m:params,  
+      ck:ae_key,sk:ae_key,ms:bitstring,cb:bitstring;
+      inj-event(ClientFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb,ms)) ==>
+      inj-event(PreServerFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb)) ||
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
+      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
+
+query cr:random, sr:random, cr':random, sr':random,
+      psk:preSharedKey,p:pubkey, e:element,
+      o:params, m:params,  
+      ck:ae_key,sk:ae_key,ms:bitstring,cb:bitstring;
+      inj-event(ClientFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb,ms)) ==>
+      inj-event(PreServerFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb)).
+
+
+(* Main channel-binding query: fails if cb = ms, succeeds if cb = m1 *)
+query cr:random, sr:random, p:pubkey, cr':random, sr':random, p':pubkey;
+      event(MatchingChannelBinding(TLS13,cr,sr,p,TLS13,cr',sr',p')).
+
+(* Following queries fail for TLS 1.2 but should succeed for TLS 1.3 *)
+query cr:random, sr:random, p:pubkey, cr':random, sr':random, p':pubkey;
+      event(MatchingResumptionSecret(TLS13,cr,sr,p,TLS13,cr',sr',p')).
+
+query cr:random, sr:random, p:pubkey, cr':random, sr':random, p':pubkey;
+      event(MatchingAEKey(TLS13,cr,sr,p,TLS13,cr',sr',p')).
+
+(* 1-RTT handshake secrecy query: every disjunct is required *)
+
+query cr:random, sr:random, psk:preSharedKey, p:pubkey, ms:bitstring, aek:ae_key, cb:bitstring, cr':random, sr':random, v:version, e:element;
+      event(ClientAEKeyLeaked(TLS13,cr,sr,psk,p)) ==>
+      (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||     
+      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
+
+
+(* 1-RTT handshake authentication query: every disjunct is required; commenting any of them results in "false" *)
+
+query cr:random, sr:random, cr':random, sr':random,
+      psk:preSharedKey,p:pubkey, e:element,
+      o:params, m:params,  
+      ck:ae_key,sk:ae_key,ms:bitstring,cb:bitstring;
+      inj-event(ClientFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb,ms)) ==>
+      inj-event(PreServerFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb)) ||
+      (event(WeakOrCompromisedKey(p)) &&  (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
+      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
+
+
+(* Main appData secrecy query: every disjunct is required *)
+query cr:random, sr:random, psk:preSharedKey, p:pubkey, e:element,  ms:bitstring, aek:ae_key, cb:bitstring, cr':random, sr':random, v:version;
+      attacker(m_c(TLS13,cr,sr,p,psk)) ==>
+      (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||     
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||     
+      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
+
+query cr:nonce, psk:bitstring,kex:kex_alg,h:hash_alg,kc0:ae_key,ems0:bitstring,pt:psk_type;
+      attacker(m_c0(TLS13,cr,psk)) ==>
+      (psk = NoPSK || event(CompromisedPreSharedKey(psk))) ||
+      event(ClientOffersAE(cr,WeakAE)).
+
+
+(* Main appData authentication query: every disjunct is required; commenting any of them results in "false" *)
+(* Replay prevention relies on the recipient not accepting 2 messages with the same (n,ad);
+   it is not explicitly proved in ProVerif. *)
+
+query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
+      p:pubkey, n:bitstring, ad:bitstring, m:bitstring;
+      event(ClientReceives(TLS13,cr,sr,psk,p,n,ad,m)) ==>
+      event(ServerSends(TLS13,cr,sr,psk,p,n,ad,m)) ||
+      (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||    
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
+      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
+
+
+query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
+      p:pubkey, n:bitstring, ad:bitstring, m:bitstring;
+      event(ServerReceives(TLS13,cr,sr,psk,p,n,ad,m)) ==>
+      event(ClientSends(TLS13,cr,sr,psk,p,n,ad,m)) ||
+      ((psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||    
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
+      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
+
+query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
+      p:pubkey, n:bitstring, ad:bitstring, m:bitstring;
+      event(ServerReceives0(TLS13,cr,psk,n,ad,m)) ==>
+      event(ClientSends0(TLS13,cr,psk,n,ad,m)) ||
+      ((psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ClientOffersAE(cr,WeakAE)).
+
+process (
+	 !Client13() | !Server13() | 
+	 !longTermKeys() | !appData() |
+	 !secrecyQuery() | !channelBindingQuery() )
+

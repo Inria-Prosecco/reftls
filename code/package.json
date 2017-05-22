@@ -1,0 +1,24 @@
+{
+  "name": "prototls",
+  "version": "0.0.1",
+  "description": "A port of the miTLS/FlexTLS framework to JavaScript",
+  "main": "src/tls.js",
+  "dependencies": {
+    "jsrsasign": "^4.8.4",
+    "stack-trace": "^0.0.9"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.24.1",
+    "babel-preset-flow": "^6.23.0",
+    "flow-bin": "^0.46.0"
+  },
+  "scripts": {
+    "test": "node build/tls.js client google.com 443",
+    "selftest": "node build/tls.js server 9443 > server.log & node build/tls.js client localhost 9443; kill %1"
+  },
+  "keywords": [
+    "TLS"
+  ],
+  "author": "Karthikeyan Bhargavan, INRIA",
+  "license": "Apache-2.0"
+}

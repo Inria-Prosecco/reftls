@@ -94,7 +94,7 @@ query cr:random, sr:random, psk:preSharedKey, p:pubkey, e:element,  ms:bitstring
       event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
 
-query cr:nonce, psk:bitstring,kex:kex_alg,h:hash_alg,kc0:ae_key,ems0:bitstring,pt:psk_type;
+query cr:random, psk:bitstring,kex:kex_alg,h:hash_alg,kc0:ae_key,ems0:bitstring,pt:psk_type;
       attacker(m_c0(TLS13,cr,psk)) ==>
       (psk = NoPSK || event(CompromisedPreSharedKey(psk))) ||
       event(ClientOffersAE(cr,WeakAE)).
@@ -106,14 +106,10 @@ query cr:nonce, psk:bitstring,kex:kex_alg,h:hash_alg,kc0:ae_key,ems0:bitstring,p
 
 query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
       p:pubkey, n:bitstring, ad:bitstring, m:bitstring;
-      event(ClientReceives(TLS13,cr,sr,psk,p,n,ad,m)) ==>
-      event(ServerSends(TLS13,cr,sr,psk,p,n,ad,m)) ||
-      (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
-      event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||    
-      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
-      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
-      event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
-
+      event(ServerReceives0(TLS13,cr,psk,n,ad,m)) ==>
+      event(ClientSends0(TLS13,cr,psk,n,ad,m)) ||
+      ((psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ClientOffersAE(cr,WeakAE)).
 
 query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
       p:pubkey, n:bitstring, ad:bitstring, m:bitstring;
@@ -122,15 +118,17 @@ query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
       ((psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
       event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||    
       event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
-      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
 
-query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
+query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element, v:version,
       p:pubkey, n:bitstring, ad:bitstring, m:bitstring;
-      event(ServerReceives0(TLS13,cr,psk,n,ad,m)) ==>
-      event(ClientSends0(TLS13,cr,psk,n,ad,m)) ||
-      ((psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
-      event(ClientOffersAE(cr,WeakAE)).
+      event(ClientReceives(TLS13,cr,sr,psk,p,n,ad,m)) ==>
+      event(ServerSends(TLS13,cr,sr,psk,p,n,ad,m)) ||
+      (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
+      event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||    
+      event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
+      event(ServerChoosesKEX(cr',sr',p,v,RSA(WeakRSADecryption)))  ||  
+      event(ServerChoosesHash(cr',sr',p,v,WeakHash)). 
 
 process (
 	 !Client13() | !Server13() | 

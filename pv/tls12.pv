@@ -83,16 +83,6 @@ query cr:random, sr:random, p:pubkey, cr':random, sr':random, p':pubkey;
       event(MatchingChannelBinding(TLS12,cr,sr,p,TLS12,cr',sr',p')).
 
 
-(* Main handshake secrecy query: every disjunct is required *)
-
-query cr:random, sr:random, psk:preSharedKey, p:pubkey, ms:bitstring, aek:ae_key, cb:bitstring, cr':random, sr':random, v:version;
-      event(ClientAEKeyLeaked(TLS12,cr,sr,psk,p)) ==>
-      event(WeakOrCompromisedKey(p)) ||  
-      event(ServerChoosesKEX(cr,sr,p,TLS12,DHE(WeakDH))) ||     
-      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
-      event(ServerChoosesHash(cr',sr',p,TLS12,WeakHash)). 
-
-
 (* Main handshake authentication query: every disjunct is required; commenting any of them results in "false" *)
 
 query cr:random, sr:random, cr':random, sr':random,
@@ -106,13 +96,14 @@ query cr:random, sr:random, cr':random, sr':random,
       event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption))) || 
       event(ServerChoosesHash(cr',sr',p,TLS12,WeakHash)). 
 
+(* Main handshake secrecy query: every disjunct is required *)
 
-(* Main appData secrecy query: every disjunct is required *)
-
-query cr:random, sr:random, psk:preSharedKey, p:pubkey, ms:bitstring, aek:ae_key, cb:bitstring, cr':random, sr':random, v:version;
-      attacker(m_c(TLS12,cr,sr,p,psk)) ==>
+query cr:random, sr:random, psk:preSharedKey, p:pubkey, ms:bitstring, aek:ae_key, 
+      ra:rsa_alg, cb:bitstring, cr':random, sr':random, v:version;
+      event(ClientAEKeyLeaked(TLS12,cr,sr,psk,p)) ==>
       event(WeakOrCompromisedKey(p)) ||  
-      event(ServerChoosesAE(cr,sr,p,TLS12,WeakAE)) ||     
+      (event(PostSessionCompromisedKey(p)) &&
+       event(ServerChoosesKEX(cr,sr,p,TLS12,RSA(ra))))  ||   
       event(ServerChoosesKEX(cr,sr,p,TLS12,DHE(WeakDH))) ||     
       event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS12,WeakHash)). 
@@ -130,6 +121,21 @@ query cr:random, sr:random, cr':random, sr':random,
       event(ServerChoosesAE(cr,sr,p,TLS12,WeakAE)) ||    
       event(ServerChoosesKEX(cr,sr,p,TLS12,DHE(WeakDH))) ||    
       event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption))) || 
+      event(ServerChoosesHash(cr',sr',p,TLS12,WeakHash)). 
+
+(* Main appData secrecy query: every disjunct is required *)
+
+query cr:random, sr:random, psk:preSharedKey, 
+      p:pubkey, ms:bitstring, aek:ae_key, 
+      g:group, ra:rsa_alg, 
+      cb:bitstring, cr':random, sr':random, v:version;
+      attacker(m_c(TLS12,cr,sr,p,psk)) ==>
+      event(WeakOrCompromisedKey(p)) ||  
+      (event(PostSessionCompromisedKey(p)) &&
+       event(ServerChoosesKEX(cr,sr,p,TLS12,RSA(ra))))  ||   
+      event(ServerChoosesAE(cr,sr,p,TLS12,WeakAE)) ||     
+      event(ServerChoosesKEX(cr,sr,p,TLS12,DHE(WeakDH))) ||     
+      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS12,WeakHash)). 
 
         

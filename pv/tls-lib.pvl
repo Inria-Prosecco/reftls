@@ -149,8 +149,8 @@ table preSharedKeys(prin,prin,preSharedKey).
 
 event Reachable(bitstring).
 event WeakOrCompromisedKey(pubkey).
-event PostSessionCompromisedKey(pubkey).
 event CompromisedPreSharedKey(preSharedKey).
+event PostSessionCompromisedKey(pubkey).
 
 let longTermKeys() = 
     event WeakOrCompromisedKey(NoPubKey)
@@ -332,6 +332,10 @@ table clientSession(random,random,preSharedKey,pubkey,
 table serverSession(random,random,preSharedKey,pubkey,
 		    params,params,
 		    ae_key,ae_key,bitstring,bitstring).
+
+table serverSession0_5(random,random,preSharedKey,pubkey,
+		    params,params,
+		    ae_key,ae_key,bitstring).
 
 table clientSession0(random,preSharedKey,params,ae_key,bitstring).
 table serverSession0(random,preSharedKey,params,ae_key,bitstring).
@@ -515,11 +519,14 @@ let Server12() =
        if m1 = tls12_prf(ms,client_finished,log) then
 	  let log = (log,FIN(m1)) in
 	  let m2 = tls12_prf(ms,server_finished,log) in
-          let ck = b2ae(tls12_prf(ms,client_key_expansion,(sr,cr))) in
-          let sk = b2ae(tls12_prf(ms,server_key_expansion,(sr,cr))) in
-	  event ServerFinished(TLS12,cr,sr,NoPSK,p,offer,mode,ck,sk,m1,ms);	 
+          let cak = b2ae(tls12_prf(ms,client_key_expansion,(sr,cr))) in
+          let sak = b2ae(tls12_prf(ms,server_key_expansion,(sr,cr))) in
+	  event ServerFinished(TLS12,cr,sr,NoPSK,p,offer,mode,cak,sak,m1,ms);	 
 	  out (io,FIN(m2));
-	  insert serverSession(cr,sr,NoPSK,p,offer,mode,ck,sk,m1,ms))
+	  insert serverSession(cr,sr,NoPSK,p,offer,mode,cak,sak,m1,ms);
+ 	  phase 1; 
+          event PostSessionCompromisedKey(pk(sk));
+	  out(io,sk))
     else let RSA(r) = k in
       (in(io,CKE(epms));
        let log = (log,CKE(epms)) in
@@ -530,11 +537,14 @@ let Server12() =
        if m1 = tls12_prf(ms,client_finished,log) then
 	  let log = (log,FIN(m1)) in
 	  let m2 = tls12_prf(ms,server_finished,log) in
-          let ck = b2ae(tls12_prf(ms,client_key_expansion,(sr,cr))) in
-          let sk = b2ae(tls12_prf(ms,server_key_expansion,(sr,cr))) in
-	  event ServerFinished(TLS12,cr,sr,NoPSK,p,offer,mode,ck,sk,m1,ms);	 
+          let cak = b2ae(tls12_prf(ms,client_key_expansion,(sr,cr))) in
+          let sak = b2ae(tls12_prf(ms,server_key_expansion,(sr,cr))) in
+	  event ServerFinished(TLS12,cr,sr,NoPSK,p,offer,mode,cak,sak,m1,ms);	 
 	  out (io,FIN(m2));
-	  insert serverSession(cr,sr,NoPSK,p,offer,mode,ck,sk,m1,ms))).
+	  insert serverSession(cr,sr,NoPSK,p,offer,mode,cak,sak,m1,ms);
+ 	  phase 1; 
+          event PostSessionCompromisedKey(pk(sk));
+	  out (io,sk))).
 
 
 (********************************************************)
@@ -640,8 +650,10 @@ let Server13() =
         let log = (log,FIN(m2)) in
 	let rms =  kdf_psk(master_secret,log) in
         event ServerFinished(TLS13,cr,sr,psk,p,offer,mode,cak,sak,ems,rms);	 
-        insert serverSession(cr,sr,psk,p,offer,mode,cak,sak,ems,rms)).
-
+        insert serverSession(cr,sr,psk,p,offer,mode,cak,sak,ems,rms);
+        phase 1; 
+        event PostSessionCompromisedKey(pk(sk));
+	out(io,sk)).
 (********************************************************)
 (*  Application Data Client and Server (+Record Layer) *)
 (********************************************************)
@@ -672,6 +684,13 @@ let appData() =
      in (io,(n:bitstring, ad:bitstring, c:bitstring));
      let f = aead_dec(a,kc0,n,ad,c) in
      event ServerReceives0(TLS13,cr,psk,n,ad,f))
+  |
+    (get serverSession0_5(cr,sr,psk,ps,o,m,kc,ks,ems) in
+     let nego(v,kkk,hhh,a,pt) = m in
+     in (io,(n:bitstring, ad:bitstring));
+     let mesg = m_s(v,cr,sr,ps,psk) in
+     event ServerSends(v,cr,sr,psk,ps,n,ad,mesg);
+     out (io,aead_enc(a,ks,n,ad,mesg)))
   |
     (get clientSession(cr,sr,psk,ps,o,m,kc,ks,ems,rms) in
      let nego(v,kkk,hhh,a,pt) = m in

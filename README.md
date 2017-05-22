@@ -30,7 +30,7 @@ They use the library `tls-lib.cvl` provided below.
 
 ### Library with assumptions on TLS cryptographic primitives.
 
-* tls-lib.cvl
+* [tls-lib.cvl](cv/tls-lib.cvl)
 * tls-primitives.cvl
 
 The library `tls-lib.cvl` has been obtained by adding the following primitives `tls-primitives.cvl` to the standard CryptoVerif library.

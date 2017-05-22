@@ -67,7 +67,7 @@ query cr:random, sr:random, psk:preSharedKey, p:pubkey, ms:bitstring, aek:ae_key
       event(ClientAEKeyLeaked(TLS13,cr,sr,psk,p)) ==>
       (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
       event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||     
-      event(ServerChoosesKEX(cr',sr',p,TLS13,RSA(WeakRSADecryption)))  ||  
+      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
 
 
@@ -81,6 +81,7 @@ query cr:random, sr:random, cr':random, sr':random,
       inj-event(PreServerFinished(TLS13,cr,sr,psk,p,o,m,ck,sk,cb)) ||
       (event(WeakOrCompromisedKey(p)) &&  (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
       event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
+      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
 
 
@@ -90,6 +91,7 @@ query cr:random, sr:random, psk:preSharedKey, p:pubkey, e:element,  ms:bitstring
       (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
       event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||     
       event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||     
+      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
 
 query cr:nonce, psk:bitstring,kex:kex_alg,h:hash_alg,kc0:ae_key,ems0:bitstring,pt:psk_type;
@@ -109,6 +111,7 @@ query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
       (event(WeakOrCompromisedKey(p)) && (psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
       event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||    
       event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
+      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
 
 
@@ -119,6 +122,7 @@ query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,
       ((psk = NoPSK || event(CompromisedPreSharedKey(psk)))) ||  
       event(ServerChoosesAE(cr,sr,p,TLS13,WeakAE)) ||    
       event(ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(WeakDH,e))) ||    
+      event(ServerChoosesKEX(cr',sr',p,TLS12,RSA(WeakRSADecryption)))  ||  
       event(ServerChoosesHash(cr',sr',p,TLS13,WeakHash)). 
 
 query cr:random, sr:random, cr':random, sr':random, psk:preSharedKey, e:element,

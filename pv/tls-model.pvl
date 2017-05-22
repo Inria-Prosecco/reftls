@@ -147,13 +147,13 @@ otherwise psk2b(NoPSK) = zero.
 
 table preSharedKeys(prin,prin,preSharedKey).
 
+event Reachable(bitstring).
 event WeakOrCompromisedKey(pubkey).
 event PostSessionCompromisedKey(pubkey).
 event CompromisedPreSharedKey(preSharedKey).
 
 let longTermKeys() = 
     event WeakOrCompromisedKey(NoPubKey)
- |  event CompromisedPreSharedKey(NoPSK)
  |  (in(io,a:prin);
      new k:privkey; 
      insert longTermKeys(a,k,pk(k));
@@ -296,10 +296,10 @@ fun CKE(bitstring): msg [data].
 fun CV(bitstring):msg [data].
 fun FIN(bitstring):msg [data].
 
-event ClientAcceptsVersion(random,random,version).
-event ClientAcceptsKEX(random,random,kex_alg).
-event ClientAcceptsAE(random,random,ae_alg).
-event ClientAcceptsHash(random,random,hash_alg).
+event ClientOffersVersion(random,version).
+event ClientOffersKEX(random,kex_alg).
+event ClientOffersAE(random,ae_alg).
+event ClientOffersHash(random,hash_alg).
 
 event ClientFinished(version,random,random,
                      preSharedKey,pubkey,
@@ -450,10 +450,6 @@ let Client12() =
      let nego(=TLS12,k,h,a,pt) = mode in
      let v = TLS12 in
      let log = (CH(cr,offer),SH(sr,mode)) in
-     event ClientAcceptsVersion(cr,sr,v);
-     event ClientAcceptsKEX(cr,sr,k);
-     event ClientAcceptsAE(cr,sr,a);
-     event ClientAcceptsHash(cr,sr,h);
      in(io,CRT(p));
      let log = (log,CRT(p)) in
      get longTermKeys(sn,xxx,=p) in
@@ -546,26 +542,28 @@ let Server12() =
 (********************************************************)
 
    
-let Client13(psk:preSharedKey) = 
-    (in (io,offer:params);
-     let nego(=TLS13,DHE_13(g,eee),hhh,aaa,pt) = offer in
+let Client13() = 
+    (get preSharedKeys(a,b,psk) in
+     in (io,ioffer:params);
+     let nego(=TLS13,DHE_13(g,eee),hhh,aaa,pt) = ioffer in
      new cr:random;
      let (x:bitstring,gx:element) = dh_keygen(g) in
      let (early_secret:bitstring,kb:mac_key) = kdf_es(psk) in
      let zoffer = nego(TLS13,DHE_13(g,gx),hhh,aaa,Binder(zero)) in
      let pt = Binder(hmac(StrongHash,kb,msg2bytes(CH(cr,zoffer)))) in
-     let noffer = nego(TLS13,DHE_13(g,gx),hhh,aaa,pt) in
-     let ch = CH(cr,noffer) in
+     let offer = nego(TLS13,DHE_13(g,gx),hhh,aaa,pt) in
+     let ch = CH(cr,offer) in
+     event ClientOffersVersion(cr,TLS13);
+     event ClientOffersKEX(cr,DHE_13(g,gx));
+     event ClientOffersAE(cr,aaa);
+     event ClientOffersHash(cr,hhh);
      out(io,ch);
      let (kc0:ae_key,ems0:bitstring) = kdf_k0(early_secret,msg2bytes(ch)) in
+     insert clientSession0(cr,psk,offer,kc0,ems0);
 
      in(io,SH(sr,mode));	
      let nego(=TLS13,DHE_13(=g,gy),h,a,spt) = mode in
-     let log = (CH(cr,offer),SH(sr,mode)) in
-     event ClientAcceptsVersion(cr,sr,TLS13);
-     event ClientAcceptsKEX(cr,sr,DHE_13(g,gy));
-     event ClientAcceptsAE(cr,sr,a);
-     event ClientAcceptsHash(cr,sr,h);
+     let log = (ch,SH(sr,mode)) in
 
      let gxy = e2b(dh_exp(g,gy,x)) in
      let handshake_secret = kdf_hs(early_secret,gxy) in
@@ -580,7 +578,7 @@ let Client13(psk:preSharedKey) =
      if verify(p,hash(h,log),s) = true then
      let log = (log,CV(s)) in
      in(io,FIN(m1));
-     if m1 = hmac(StrongHash,sfin,log) then 
+     if m1 = hmac(StrongHash,sfin,log) then (
         let log = (log,FIN(m1)) in
 	let (cak:ae_key,sak:ae_key,ems:bitstring) = kdf_k(master_secret,log) in
         let m2 = hmac(StrongHash,cfin,log) in
@@ -589,11 +587,12 @@ let Client13(psk:preSharedKey) =
 
         event ClientFinished(TLS13,cr,sr,psk,p,offer,mode,cak,sak,ems,rms);
         insert clientSession(cr,sr,psk,p,offer,mode,cak,sak,ems,rms);
-        out(io,FIN(m2))).
+        out(io,FIN(m2)))).
 
     
-let Server13(psk:preSharedKey) = 
-    (in(io,ch:msg); 
+let Server13() = 
+    (get preSharedKeys(a,b,psk) in
+     in(io,ch:msg); 
      let CH(cr,offer) = ch in
      let nego(=TLS13,DHE_13(g,gx),hhh,aaa,Binder(m)) = offer in
      let (early_secret:bitstring,kb:mac_key) = kdf_es(psk) in
@@ -601,6 +600,7 @@ let Server13(psk:preSharedKey) =
      if m = hmac(StrongHash,kb,msg2bytes(CH(cr,zoffer))) then
      let (kc0:ae_key,ems0:bitstring) = 
          kdf_k0(early_secret,msg2bytes(ch)) in
+     insert serverSession0(cr,psk,offer,kc0,ems0);
 
      new sr:random;
      in(io,SH(xxx,mode));
@@ -627,6 +627,7 @@ let Server13(psk:preSharedKey) =
      out(io,CV(sg));
      let log = (log,CV(sg)) in
      let m1 = hmac(StrongHash,sfin,log) in
+
      let log = (log,FIN(m1)) in
 
      let (cak:ae_key,sak:ae_key,ems:bitstring) = kdf_k(master_secret,log) in
@@ -696,5 +697,5 @@ let appData() =
      let nego(v,kkk,hhh,a,pt) = m in
      in (io,(n:bitstring, ad:bitstring, c:bitstring));
      let f = aead_dec(a,ks,n,ad,c) in
-     event ClientRecives(v,cr,sr,psk,ps,n,ad,f))
+     event ClientReceives(v,cr,sr,psk,ps,n,ad,f))
 .

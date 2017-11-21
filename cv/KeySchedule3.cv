@@ -118,3 +118,7 @@ process
 	if b then out(start, hk); processLeft
 	     else out(start, hk); processRight
 	     
+(* EXPECTED
+All queries proved.
+0.480s (user 0.472s + system 0.008s), max rss 53424K
+END *)

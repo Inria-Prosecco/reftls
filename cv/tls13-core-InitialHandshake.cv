@@ -23,6 +23,10 @@ channel io1, io2, io3, io4, io5, io6, io7, io8, io9, io10,
 	io25', io26', io27', io28', io31', io32',
 	cCorruptS1, cCorruptC1, cCorruptS2, cCorruptC2.
 
+param N1,N5,N6,
+      N7,N8,N9,N10,N11,N12,
+      N13,N14,N15,N16.
+
 set casesInCorresp = false.
     (* Distinguishing cases in the proof of correspondences
        is too slow with the "unique channel id" property,
@@ -33,7 +37,7 @@ proof {
       out_game "g1.out" occ;
       (* After the first input in the server (which defines sgx), and new sr_???: nonce.
          gx_359 is the value of gx in the client.  *)
-      insert 1695 "find j' <= N1 suchthat defined(gx_359[j']) && sgx = gx_359[j'] then";
+      insert 1699 "find j' <= N1 suchthat defined(gx_359[j']) && sgx = gx_359[j'] then";
       (* gy_446 is the value of gy in the server *)
       SArename gy_446;
       out_game "g2.out" occ;
@@ -44,7 +48,7 @@ proof {
       remove_assign binder s_373;
       remove_assign binder s_447;
       simplify;
-      crypto gdh(exp) "variables: x_358 -> @4_a, y_650 -> @4_b .";
+      crypto gdh(exp) "variables: x_358 -> @4_a, y_649 -> @4_b .";
       crypto prf2 *;
       crypto client_server_hts *;
       crypto prf_fin_key_iv *;
@@ -280,28 +284,28 @@ query secret c_resumption_secret public_vars c_cats, c_sats, c_ems,
 (* Authentication of the server to the client *)
 
 event ClientTerm(bitstring,bitstring).
-event ServerAccept(bitstring,bitstring).
+event ServerAccept(bitstring,bitstring,N6).
 
-query log4: bitstring, keys: bitstring;
-      event inj:ClientTerm(log4, keys) ==> inj:ServerAccept(log4, keys).
+query log4: bitstring, keys: bitstring, i <= N6;
+      event inj:ClientTerm(log4, keys) ==> inj:ServerAccept(log4, keys, i).
 
-query log4: bitstring, s_keys: bitstring, c_keys: bitstring;
-      event ClientTerm(log4, c_keys) &&
-      	    ServerAccept(log4, s_keys) ==>
-	    c_keys = s_keys.
+query log4: bitstring, s_keys: bitstring, s_keys': bitstring, i <= N6, i' <= N6;
+      event ServerAccept(log4, s_keys, i) &&
+      	    ServerAccept(log4, s_keys', i') ==>
+	    i = i'.
 
 (* Correspondence client to server *)
 
 event ServerTerm(bitstring,bitstring).
-event ClientAccept(bitstring,bitstring).
+event ClientAccept(bitstring,bitstring, N1).
 
-query log7: bitstring, keys: bitstring;
-      event inj:ServerTerm(log7, keys) ==> inj:ClientAccept(log7, keys).
+query log7: bitstring, keys: bitstring, i <= N1;
+      event inj:ServerTerm(log7, keys) ==> inj:ClientAccept(log7, keys, i).
 
-query log7: bitstring, s_keys: bitstring, c_keys: bitstring;
-      event ServerTerm(log7, s_keys) &&
-      	    ClientAccept(log7, c_keys) ==>
-	    s_keys = c_keys.
+query log7: bitstring, c_keys: bitstring, c_keys': bitstring, i <= N1, i' <= N1;
+      event ClientAccept(log7, c_keys, i) &&
+      	    ClientAccept(log7, c_keys', i') ==>
+	    i = i'.
 
 (* Unique channel identifier 
    As explained in the paper, we manually prove that 
@@ -418,12 +422,8 @@ letfun check_client_finished_client_auth(masterSecret: extracted, sfl:bitstring,
       (zero_key, false).
 
 
-param N1,N5,N6,
-      N7,N8,N9,N10,N11,N12,
-      N13,N14,N15,N16.
-
 let Client = 
-!N1
+!i1 <= N1
     in(io1,());
     let (cr:nonce,x:key,cgx:elt) = send_client_hello() in
     (* for 0-rtt  insert clientEphemeralKeys(cr,x,cgx); *)
@@ -492,12 +492,12 @@ let Client =
 	   The secrecy of sats is proved at the server.
 
 	   We perform 3 compositions here:
-	   - composition with the record protocol with secret s_sats (ClientTerm is event e2), by Lemma REFlem:compos2
-	   - composition with the record protocol with secret c_cats (ClientAccept is event e1), by Lemma REFlem:compos2
-	   - composition with the handshake with pre-shared key with secret c_resumption_secret (ClientAccept is event e1), by Lemma REFlem:compos2_hash
+	   - composition with the record protocol with secret s_sats (ClientTerm is event e2)
+	   - composition with the record protocol with secret c_cats (ClientAccept is event e1)
+	   - composition with the handshake with pre-shared key with secret c_resumption_secret (ClientAccept is event e1)
 	    *)
         event ClientTerm((cr,cgx,sr,cgy,log0,log1,scv,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats, c_sats, ems));
-	event ClientAccept((cr,cgx,sr,cgy,log0,certS,log1,scv,m,final_log),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats, c_sats, ems,resumption_secret));
+	event ClientAccept((cr,cgx,sr,cgy,log0,certS,log1,scv,m,final_log),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats, c_sats, ems,resumption_secret),i1);
 	let c_cats: key = cats in
 	let c_ems: key = ems in
 	let c_resumption_secret: key = resumption_secret in
@@ -511,7 +511,7 @@ let Client =
 	   - the record protocol sender-side for cats,
 	   - the record protocol receiver side for c_sats and 
 	   - the client-side handshake with pre-shared key for resumption_secret,
-	     with no security claim, by Lemma REFlem:compos_comm1 *)
+	   with no security claim, by eliminating private communications *)
 	out(io7, (final_mess, (resumption_secret, cats, c_sats, ems))).
 
 let ServerAfter05RTT1 =
@@ -561,8 +561,8 @@ let ServerAfter05RTT1 =
 	     The secrecy is proved at the client. 
 
 	     We perform 2 compositions here:
-	       - composition with the record protocol with secret c_cats (ServerTerm is event e2), by Lemma REFlem:compos2
-	       - composition with the handshake with pre-shared key with secret c_resumption_secret (ServerTerm is event e2), by Lemma REFlem:compos2_hash *)
+	       - composition with the record protocol with secret c_cats (ServerTerm is event e2)
+	       - composition with the handshake with pre-shared key with secret c_resumption_secret (ServerTerm is event e2) *)
 	  event ServerTerm((cr,sgx,sr,sgy,log0,certS,log1,scv,m,clientfinished),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,s_cats1, sats, s_ems1,s_resumption_secret1));
 	  out(io27, ())
    else
@@ -573,7 +573,7 @@ let ServerAfter05RTT1 =
 	       - the record protocol receiver-side for s_cats1,
 	       - the record protocol sender side for sats and 
 	       - the server-side handshake with pre-shared key for s_resumption_secret1,
-	     with no security claim, by Lemma REFlem:compos_comm1 *)
+	     with no security claim, by eliminating private communications *)
 	  out(io28, (s_resumption_secret1, s_cats1, sats, s_ems1)).
 
 let ServerAfter05RTT2 =
@@ -623,8 +623,8 @@ let ServerAfter05RTT2 =
 	     The secrecy is proved at the client. 
 
 	     We perform 2 compositions here:
-	       - composition with the record protocol with secret c_cats (ServerTerm is event e2), by Lemma REFlem:compos2
-	       - composition with the handshake with pre-shared key with secret c_resumption_secret (ServerTerm is event e2), by Lemma REFlem:compos2_hash *)
+	       - composition with the record protocol with secret c_cats (ServerTerm is event e2)
+	       - composition with the handshake with pre-shared key with secret c_resumption_secret (ServerTerm is event e2) *)
 	  event ServerTerm((cr,sgx,sr,sgy,log0,certS,log1,scv,m,clientfinished),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,s_cats2, sats, s_ems2,s_resumption_secret2));
 	  out(io27', ())
    else
@@ -635,11 +635,11 @@ let ServerAfter05RTT2 =
 	       - the record protocol receiver-side for s_cats2,
 	       - the record protocol sender side for sats and 
 	       - the server-side handshake with pre-shared key for s_resumption_secret2,
-	     with no security claim, by Lemma REFlem:compos_comm1 *)
+	     with no security claim, by eliminating private communications *)
 	  out(io28', (s_resumption_secret2, s_cats2, sats, s_ems2)).
 
 let Server = 
- !N6
+ !i6 <= N6
    in(io20,ClientHello(cr,sgx));
    let (sr:nonce,sgy:elt,handshakeSecret:extracted) = recv_client_hello(hk,cr,sgx) in
    out(io21,ServerHelloOut(sr,sgy));
@@ -663,8 +663,8 @@ let Server =
       We have security when the Diffie-Hellman share comes from the client *)
    find j <= N1 suchthat defined(cgx[j]) && sgx = cgx[j] then
    (
-      (* We compose with the record protocol with secret s_sats (ServerAccept is event e1), by Lemma REFlem:compos2 *)
-      event ServerAccept((cr,sgx,sr,sgy,log0,log1,scv,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats, sats, ems));
+      (* We compose with the record protocol with secret s_sats (ServerAccept is event e1) *)
+      event ServerAccept((cr,sgx,sr,sgy,log0,log1,scv,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats, sats, ems), i6);
       let s_sats: key = sats in
       out(io25,(ServerCertificateVerifyOut(scv), ServerFinishedOut(m)));
       ServerAfter05RTT1
@@ -673,7 +673,7 @@ let Server =
       (* We leak sats.
       	 We compose with a process that outputs the ServerCertificateVerify and	
 	 ServerFinished messages, and runs the record protocol sender-side with sats,
-	 with no security claim, by Lemma REFlem:compos_comm2 *)
+	 with no security claim, by eliminating private communications *)
       out(io25', ((ServerCertificateVerifyOut(scv), ServerFinishedOut(m)), sats));
       ServerAfter05RTT2.
 
@@ -707,3 +707,8 @@ process
   (Client | Server | corruptS | corruptC | hashoracle))
   |
   hashoracle1)
+
+(* EXPECTED
+All queries proved.
+115.935s (user 115.751s + system 0.184s), max rss 2171776K
+END *)

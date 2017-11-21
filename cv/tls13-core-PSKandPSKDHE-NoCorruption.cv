@@ -19,6 +19,10 @@ channel io1, io1', io2, io2', io3, io4, io5, io6, io7, io8, io9, io10,
 	dhe_io21, dhe_io22, dhe_io23, dhe_io24, dhe_io25, dhe_io26, dhe_io27, dhe_io28, dhe_io29, dhe_io30,
 	cCorrupt.
 
+param N1,N5,N6,
+      N7,N8,N9,N10,N11,N12,
+      N13,N14,N15,N16.
+
 (* The proof can be guided as follows, but the automatic proof strategy works.
 
 proof {
@@ -223,6 +227,11 @@ fun ClientFinishedLogInfo(bitstring, bitstring): bitstring [compos].
 forall cr: nonce, l: bitstring, cr': nonce, gx: elt, l': bitstring;
        ClientHelloBinderLogInfo(cr,l) <> ClientHelloBinderLogInfoDHE(cr',gx,l').
 
+(* Tables *)
+
+table c_table(nonce, bitstring, bitstring, bitstring).
+table cdhe_table(nonce, elt, bitstring, bitstring, bitstring).
+
 (* Secrecy of the key *)
 
 query secret c_cats public_vars c_sats, c_ems, cdhe_cats, cdhe_sats, cdhe_ems, sdhe_cats, sdhe_sats, sdhe_ems, c_resumption_secret, s_resumption_secret, cdhe_resumption_secret, sdhe_resumption_secret, c_cets, c_eems, s_cets2, s_cets3, s_eems, cdhe_cets, cdhe_eems, sdhe_cets2, sdhe_cets3, sdhe_eems.
@@ -249,50 +258,50 @@ query secret sdhe_resumption_secret public_vars c_cats, c_sats, c_ems, s_cats, s
 (* Authentication of the server to the client *)
 
 event ClientTerm(bitstring,bitstring).
-event ServerAccept(bitstring,bitstring).
+event ServerAccept(bitstring,bitstring,N6).
 
-query log4: bitstring, keys: bitstring;
-      event inj:ClientTerm(log4, keys) ==> inj:ServerAccept(log4, keys).
+query log4: bitstring, keys: bitstring, i<=N6;
+      event inj:ClientTerm(log4, keys) ==> inj:ServerAccept(log4, keys, i).
 
-query log4: bitstring, s_keys: bitstring, c_keys: bitstring;
-      event ClientTerm(log4, c_keys) &&
-      	    ServerAccept(log4, s_keys) ==>
-	    c_keys = s_keys.
+query log4: bitstring, s_keys: bitstring, s_keys': bitstring, i <= N6, i' <= N6;
+      event ServerAccept(log4, s_keys, i) &&
+      	    ServerAccept(log4, s_keys', i') ==>
+	    i = i'.
 
 event ClientTermDHE(bitstring,bitstring).
-event ServerAcceptDHE(bitstring,bitstring).
+event ServerAcceptDHE(bitstring,bitstring, N7).
 
-query log4: bitstring, keys: bitstring;
-      event inj:ClientTermDHE(log4, keys) ==> inj:ServerAcceptDHE(log4, keys).
+query log4: bitstring, keys: bitstring, i <= N7;
+      event inj:ClientTermDHE(log4, keys) ==> inj:ServerAcceptDHE(log4, keys, i).
 
-query log4: bitstring, s_keys: bitstring, c_keys: bitstring;
-      event ClientTermDHE(log4, c_keys) &&
-      	    ServerAcceptDHE(log4, s_keys) ==>
-	    c_keys = s_keys.
+query log4: bitstring, s_keys: bitstring, s_keys': bitstring, i <= N7, i' <= N7;
+      event ServerAcceptDHE(log4, s_keys, i) &&
+      	    ServerAcceptDHE(log4, s_keys', i') ==>
+	    i = i'.
 
 (* Authentication of the client to the server *)
 
 event ServerTerm(bitstring,bitstring).
-event ClientAccept(bitstring,bitstring).
+event ClientAccept(bitstring,bitstring, N1).
 
-query log7: bitstring, keys: bitstring;
-      event inj:ServerTerm(log7, keys) ==> inj:ClientAccept(log7, keys).
+query log7: bitstring, keys: bitstring, i <= N1;
+      event inj:ServerTerm(log7, keys) ==> inj:ClientAccept(log7, keys, i).
 
-query log7: bitstring, s_keys: bitstring, c_keys: bitstring;
-      event ServerTerm(log7, s_keys) &&
-      	    ClientAccept(log7, c_keys) ==>
-	    s_keys = c_keys.
+query log7: bitstring, c_keys: bitstring, c_keys': bitstring, i <= N1, i' <= N1;
+      event ClientAccept(log7, c_keys, i) &&
+      	    ClientAccept(log7, c_keys', i') ==>
+	    i = i'.
 
 event ServerTermDHE(bitstring,bitstring).
-event ClientAcceptDHE(bitstring,bitstring).
+event ClientAcceptDHE(bitstring,bitstring, N2).
 
-query log7: bitstring, keys: bitstring;
-      event inj:ServerTermDHE(log7, keys) ==> inj:ClientAcceptDHE(log7, keys).
+query log7: bitstring, keys: bitstring, i <= N2;
+      event inj:ServerTermDHE(log7, keys) ==> inj:ClientAcceptDHE(log7, keys, i).
 
-query log7: bitstring, s_keys: bitstring, c_keys: bitstring;
-      event ServerTermDHE(log7, s_keys) &&
-      	    ClientAcceptDHE(log7, c_keys) ==>
-	    s_keys = c_keys.
+query log7: bitstring, c_keys: bitstring, c_keys': bitstring, i <= N2, i' <= N2;
+      event ClientAcceptDHE(log7, c_keys, i) &&
+      	    ClientAcceptDHE(log7, c_keys', i') ==>
+	    i = i'.
 
 (* Early authentication - these are limited authentication properties
    guaranteed by the MAC *)
@@ -322,15 +331,15 @@ query cr: nonce, gx: elt, log1: bitstring, binder: bitstring;
 
 (* Case in which messages are not altered *) 
 event ServerEarlyTerm1(bitstring,key).
-event ClientEarlyAccept1(bitstring,key).
+event ClientEarlyAccept1(bitstring,key,N1).
 
-query log1: bitstring, cets: key;
+query log1: bitstring, cets: key, i <= N1;
       event ServerEarlyTerm1(log1, cets) ==>
-      	    ClientEarlyAccept1(log1, cets).
+      	    ClientEarlyAccept1(log1, cets, i).
 
-query log1: bitstring, cets: key, cets': key;
-      event ClientEarlyAccept1(log1, cets) &&
-      	    ServerEarlyTerm1(log1, cets') ==> cets = cets'.
+query log1: bitstring, cets: key, cets': key, i <= N1, i' <= N1;
+      event ClientEarlyAccept1(log1, cets, i) &&
+      	    ClientEarlyAccept1(log1, cets', i') ==> i = i'.
 
 query secret c_cets public_vars c_cats, c_sats, c_ems, s_cats, s_sats, s_ems, cdhe_cats, cdhe_sats, cdhe_ems, sdhe_cats, sdhe_sats, sdhe_ems, c_resumption_secret, s_resumption_secret, cdhe_resumption_secret, sdhe_resumption_secret, c_eems, s_eems, s_cets3, cdhe_cets, cdhe_eems, sdhe_cets2, sdhe_cets3, sdhe_eems.
 
@@ -349,15 +358,15 @@ query secret s_cets1 public_vars c_cats, c_sats, c_ems, s_cats, s_sats, s_ems, c
 
 (* Case in which messages are not altered *) 
 event ServerEarlyTermDHE1(bitstring,key).
-event ClientEarlyAcceptDHE1(bitstring,key).
+event ClientEarlyAcceptDHE1(bitstring,key,N2).
 
-query log1: bitstring, cets: key;
+query log1: bitstring, cets: key, i2 <= N2;
       event ServerEarlyTermDHE1(log1, cets) ==>
-      	    ClientEarlyAcceptDHE1(log1, cets).
+      	    ClientEarlyAcceptDHE1(log1, cets,i2).
 
-query log1: bitstring, cets: key, cets': key;
-      event ClientEarlyAcceptDHE1(log1, cets) &&
-      	    ServerEarlyTermDHE1(log1, cets') ==> cets = cets'.
+query log1: bitstring, cets: key, cets': key, i <= N2, i' <= N2;
+      event ClientEarlyAcceptDHE1(log1, cets, i) &&
+      	    ClientEarlyAcceptDHE1(log1, cets', i') ==> i = i'.
 
 query secret cdhe_cets public_vars c_cats, c_sats, c_ems, s_cats, s_sats, s_ems, cdhe_cats, cdhe_sats, cdhe_ems, sdhe_cats, sdhe_sats, sdhe_ems, c_resumption_secret, s_resumption_secret, cdhe_resumption_secret, sdhe_resumption_secret, c_eems, c_cets, s_eems, s_cets2, s_cets3, cdhe_eems, sdhe_eems, sdhe_cets3.
 
@@ -513,14 +522,11 @@ letfun recv_client_helloDHE(earlySecret: extracted, binder_key: key, cr:nonce, g
    (cr,gx,zero_extracted,chbl,zero_two_keys,false).
 
 
-param N1,N5,N6,
-      N7,N8,N9,N10,N11,N12,
-      N13,N14,N15,N16.
 
 (* PSK without DHE *)
 
 let Client = 
-!N1
+!i1 <= N1
     in(io1,c_log1: bitstring);
     let cr = send_client_hello1() in
     out(io1', cr);
@@ -531,10 +537,11 @@ let Client =
     let cets = get_client_ets(cets_eems) in
     let c_eems: key = get_eems(cets_eems) in
     event ClientEarlyAccept(c_cr, c_log1, c_binder);
+    insert c_table(c_cr, c_log1, c_binder, c_log1'); 
     (* 0-RTT: We compose with tls13-core-RecordProtocol-0RTT.cv, 
-       with secret c_cets, by Lemma REFlem:compos2-noninj 
-       (ClientEarlyAccept1 is event e1). *)
-    event ClientEarlyAccept1((c_cr, c_log1, c_binder, c_log1'), cets);
+       with secret c_cets
+       (ClientEarlyAccept1 is event e1 - non-injective variant). *)
+    event ClientEarlyAccept1((c_cr, c_log1, c_binder, c_log1'), cets, i1);
     let c_cets: key = cets in
     out(io2,ClientHelloOut(c_cr, c_binder));
     in(io3,ServerHelloIn(sr,log2));
@@ -556,18 +563,18 @@ let Client =
     let c_sats: key = sats in
     (* We prove that c_cats, c_sats, c_ems and c_resumption_secret are secret 
        We compose 
-       - with the record protocol with secret s_sats, by Lemma REFlem:compos2 (ClientTerm is event e2)
-       - with the record protocol with secret c_cats, by Lemma REFlem:compos2 (ClientAccept is event e1)
-       - with the PSK/PSKDHE handshake with secret c_resumption_secret, by Lemma REFlem:compos2_hash (ClientAccept is event e1) *)
+       - with the record protocol with secret s_sats (ClientTerm is event e2)
+       - with the record protocol with secret c_cats (ClientAccept is event e1)
+       - with the PSK/PSKDHE handshake with secret c_resumption_secret (ClientAccept is event e1) *)
     event ClientTerm((c_cr,c_log1,c_binder,c_log1',sr,log2,log3,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,c_sats,ems));
-    event ClientAccept((c_cr,c_log1,c_binder,c_log1',sr,log2,log3,m,log4,cfin),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,c_sats,ems,resumption_secret));
+    event ClientAccept((c_cr,c_log1,c_binder,c_log1',sr,log2,log3,m,log4,cfin),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,c_sats,ems,resumption_secret),i1);
     let c_cats: key = cats in
     let c_ems: key = ems in
     let c_resumption_secret : key = resumption_secret in
     out(io6,ClientFinishedOut(cfin)).
 
 let Server = 
- !N6
+ !i6 <= N6
    in(io9,ClientHelloIn(s_cr: nonce,s_log1: bitstring,s_binder: bitstring,s_log1': bitstring));
    let (sr:nonce,chl:bitstring,cets_eems: two_keys,=true) = 
       recv_client_hello(earlySecret,binder_key,s_cr,s_log1,s_binder,s_log1') in
@@ -576,13 +583,12 @@ let Server =
    out(io10,ServerHelloOut(sr));
    ((*  for 0-RTT *)
    (in(io11', ());
-   find ucl <= N1 suchthat defined(c_cr[ucl], c_log1[ucl], c_binder[ucl], c_log1'[ucl]) &&
-      c_cr[ucl] = s_cr && c_log1[ucl] = s_log1 && c_binder[ucl] = s_binder && c_log1'[ucl] = s_log1' then
+   get c_table(=s_cr, =s_log1, =s_binder, =s_log1') in
       (* 1st case: messages from the client have not been altered.
          The key is good
 	 We compose with tls13-core-RecordProtocol-0RTT.cv,
-	 with secret c_cets, by Lemma REFlem:compos2-noninj
-	 (ServerEarlyTerm1 is event e2) *)
+	 with secret c_cets
+	 (ServerEarlyTerm1 is event e2 - non-injective variant) *)
 	  let s_cets2: key = get_client_ets(cets_eems) in
           event ServerEarlyTerm1((s_cr, s_log1, s_binder, s_log1'), s_cets2);
 	  out(io12', ())
@@ -590,12 +596,12 @@ let Server =
       (* 2nd case: messages from the client have been altered.
          The key will be secret and no message will actually be received on it.
          We compose with tls13-core-RecordProtocol-0RTT-badkey.cv,
-	 by Lemma REFlem:compos1-weak. *)
+	 using the variant "single process with key reuse". *)
 	 let s_cets3: key = get_client_ets(cets_eems) in
 	 event ServerEarlyTerm2((s_cr, s_log1, s_binder, s_log1'), s_cets3);
-	 find us <= N6 suchthat defined(s_cr[us], s_log1[us], s_binder[us], s_log1'[us], s_cets1[us]) &&
-	      s_cr[us] = s_cr && s_log1[us] = s_log1 && s_binder[us] = s_binder && s_log1'[us] = s_log1'
-	 then
+         find us <= N6 suchthat defined(s_cr[us], s_log1[us], s_binder[us], s_log1'[us], s_cets1[us]) &&
+              s_cr[us] = s_cr && s_log1[us] = s_log1 && s_binder[us] = s_binder && s_log1'[us] = s_log1'
+         then
 	    (* We reuse a previous key s_cets1[us] *)
 	    out(io13', ())
 	 else
@@ -617,9 +623,9 @@ let Server =
    let sats = get_server_ats(cs_ats_exp) in
    let ems = get_exporter_ms(cs_ats_exp) in
    (* We prove that s_sats is secret, already here for 0.5-RTT
-      We then compose with the record protocol, with secret s_sats,
-      by Lemma REFlem:compos2 (ServerAccept is event e1) *)
-   event ServerAccept((s_cr,s_log1,s_binder,s_log1',sr,log2,log3,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,sats,ems));
+      We then compose with the record protocol, with secret s_sats
+      (ServerAccept is event e1) *)
+   event ServerAccept((s_cr,s_log1,s_binder,s_log1',sr,log2,log3,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,sats,ems),i6);
    let s_sats: key = sats in
    out(io18,ServerFinishedOut(m));
    in(io19,ClientFinishedIn(log4, cfin));
@@ -631,15 +637,15 @@ let Server =
    let s_ems: key = ems in
    let s_resumption_secret : key = resumption_secret in
    (* We compose 
-      - with the record protocol with secret c_cats, by Lemma REFlem:compos2 (ServerTerm is event e2) and 
-      - with the PSK/PSKDHE handshake with secret c_resumption_secret, by Lemma REFlem:compos2_hash (ServerTerm is event e2) *)
+      - with the record protocol with secret c_cats (ServerTerm is event e2) and 
+      - with the PSK/PSKDHE handshake with secret c_resumption_secret (ServerTerm is event e2) *)
    event ServerTerm((s_cr,s_log1,s_binder,s_log1',sr,log2,log3,m,log4,cfin),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,s_cats,sats,s_ems,s_resumption_secret));
    out(io30, ())).
 
 (* PSKDHE *)
 
 let ClientDHE = 
-!N2
+!i2 <= N2
     in(dhe_io1,cdhe_log1: bitstring);
     let (cr: nonce,  x: key, gx: elt) = send_client_hello1DHE() in
     out(dhe_io1', (cr,gx));
@@ -648,13 +654,14 @@ let ClientDHE =
     in(dhe_io2', cdhe_log1': bitstring);
     let (cdhe_cr:nonce,x:key,cgx:elt, cdhe_binder: bitstring, chl: bitstring, cets_eems: two_keys) = 
        send_client_hello2DHE(earlySecret, binder_key, cr, x, gx, cdhe_log1, cdhe_log1') in
+    insert cdhe_table(cdhe_cr, cgx, cdhe_log1, cdhe_binder, cdhe_log1');
     let cets = get_client_ets(cets_eems) in
     let cdhe_eems: key = get_eems(cets_eems) in
     event ClientEarlyAcceptDHE(cdhe_cr, cgx, cdhe_log1, cdhe_binder);
     (* 0-RTT: We compose with tls13-core-RecordProtocol-0RTT.cv, 
-       with secret cdhe_cets, by Lemma REFlem:compos2-noninj 
-       (ClientEarlyAcceptDHE1 is event e1). *)
-    event ClientEarlyAcceptDHE1((cdhe_cr, cgx, cdhe_log1, cdhe_binder, cdhe_log1'), cets);
+       with secret cdhe_cets 
+       (ClientEarlyAcceptDHE1 is event e1 - non-injective variant). *)
+    event ClientEarlyAcceptDHE1((cdhe_cr, cgx, cdhe_log1, cdhe_binder, cdhe_log1'), cets, i2);
     let cdhe_cets: key = cets in
     out(dhe_io2,ClientHelloOutDHE(cdhe_cr,cgx,cdhe_binder));
     in(dhe_io3,ServerHelloInDHE(sr,cgy,log2));
@@ -677,18 +684,18 @@ let ClientDHE =
     let cdhe_sats: key = sats in
     (* We prove that cdhe_cats, cdhe_sats, cdhe_ems and cdhe_resumption_secret are secret
        We compose 
-       - with the record protocol with secret sdhe_sats, by Lemma REFlem:compos2 (ClientTermDHE is event e2)
-       - with the record protocol with secret cdhe_cats, by Lemma REFlem:compos2 (ClientAcceptDHE is event e1)
-       - with the PSK/PSKDHE handshake with secret cdhe_resumption_secret, by Lemma REFlem:compos2_hash (ClientAcceptDHE is event e1) *)
+       - with the record protocol with secret sdhe_sats (ClientTermDHE is event e2)
+       - with the record protocol with secret cdhe_cats (ClientAcceptDHE is event e1)
+       - with the PSK/PSKDHE handshake with secret cdhe_resumption_secret (ClientAcceptDHE is event e1) *)
     event ClientTermDHE((cdhe_cr,cgx,cdhe_log1,cdhe_binder,cdhe_log1',sr,cgy,log2,log3,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,cdhe_sats,ems));
-    event ClientAcceptDHE((cdhe_cr,cgx,cdhe_log1,cdhe_binder,cdhe_log1',sr,cgy,log2,log3,m,log4,cfin),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,cdhe_sats,ems,resumption_secret));
+    event ClientAcceptDHE((cdhe_cr,cgx,cdhe_log1,cdhe_binder,cdhe_log1',sr,cgy,log2,log3,m,log4,cfin),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,cdhe_sats,ems,resumption_secret),i2);
     let cdhe_cats: key = cats in
     let cdhe_ems: key = ems in
     let cdhe_resumption_secret: key = resumption_secret in
     out(dhe_io6,ClientFinishedOut(cfin)).
 
 let ServerDHE = 
- !N7
+ !i7 <= N7
    in(dhe_io9,ClientHelloInDHE(sdhe_cr: nonce, sgx: elt, sdhe_log1: bitstring, sdhe_binder: bitstring, sdhe_log1': bitstring));
    let (sr:nonce,sgy:elt,handshakeSecret:extracted, chl: bitstring, cets_eems: two_keys,=true) = 
       recv_client_helloDHE(earlySecret,binder_key,sdhe_cr,sgx,sdhe_log1,sdhe_binder,sdhe_log1') in
@@ -697,14 +704,12 @@ let ServerDHE =
    out(dhe_io10,ServerHelloOutDHE(sr,sgy));
    ((*  for 0-RTT *)
    (in(dhe_io11', ());
-   find ucl <= N2 suchthat defined(cdhe_cr[ucl], cgx[ucl], cdhe_log1[ucl], cdhe_binder[ucl], cdhe_log1'[ucl]) &&
-      cdhe_cr[ucl] = sdhe_cr && cgx[ucl] = sgx && cdhe_log1[ucl] = sdhe_log1 && 
-      cdhe_binder[ucl] = sdhe_binder && cdhe_log1'[ucl] = sdhe_log1' then
+   get cdhe_table(=sdhe_cr, =sgx, =sdhe_log1, =sdhe_binder, =sdhe_log1') in
       (* 1st case: messages from the client have not been altered.
          The key is good
 	 We compose with tls13-core-RecordProtocol-0RTT.cv,
-	 with secret cdhe_cets, by Lemma REFlem:compos2-noninj
-	 (ServerEarlyTerm1 is event e2)  *)
+	 with secret cdhe_cets
+	 (ServerEarlyTerm1 is event e2 - non-injective variant)  *)
 	  let sdhe_cets2: key = get_client_ets(cets_eems) in
           event ServerEarlyTermDHE1((sdhe_cr, sgx, sdhe_log1, sdhe_binder, sdhe_log1'), sdhe_cets2);
 	  out(io12', ())
@@ -712,13 +717,13 @@ let ServerDHE =
       (* 2nd case: messages from the client have been altered.
          The key will be secret and no message will actually be received on it.
          We compose with tls13-core-RecordProtocol-0RTT-badkey.cv,
-	 by Lemma REFlem:compos1-weak. *)
+	 using the variant "single process with key reuse". *)
 	 let sdhe_cets3: key = get_client_ets(cets_eems) in
 	 event ServerEarlyTermDHE2((sdhe_cr, sgx, sdhe_log1, sdhe_binder, sdhe_log1'), sdhe_cets3);
-	 find us <= N7 suchthat defined(sdhe_cr[us], sgx[us], sdhe_log1[us], sdhe_binder[us], sdhe_log1'[us], sdhe_cets1[us]) &&
-	      sdhe_cr[us] = sdhe_cr && sgx[us] = sgx && sdhe_log1[us] = sdhe_log1 && 
-	      sdhe_binder[us] = sdhe_binder && sdhe_log1'[us] = sdhe_log1'
-	 then
+         find us <= N7 suchthat defined(sdhe_cr[us], sgx[us], sdhe_log1[us], sdhe_binder[us], sdhe_log1'[us], sdhe_cets1[us]) &&
+              sdhe_cr[us] = sdhe_cr && sgx[us] = sgx && sdhe_log1[us] = sdhe_log1 && 
+              sdhe_binder[us] = sdhe_binder && sdhe_log1'[us] = sdhe_log1'
+         then
 	    (* We reuse a previous key sdhe_cets1[us] *)
 	    out(io13', ())
 	 else
@@ -740,9 +745,9 @@ let ServerDHE =
    let sats = get_server_ats(cs_ats_exp) in
    let ems = get_exporter_ms(cs_ats_exp) in
    (* We prove that sdhe_sats is secret, already here for 0.5-RTT
-      We then compose with the record protocol, with secret sdhe_sats,
-      by Lemma REFlem:compos2 (ServerAcceptDHE is event e1) *)
-   event ServerAcceptDHE((sdhe_cr,sgx,sdhe_log1,sdhe_binder,sdhe_log1',sr,sgy,log2,log3,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,sats,ems));
+      We then compose with the record protocol, with secret sdhe_sats
+      (ServerAcceptDHE is event e1) *)
+   event ServerAcceptDHE((sdhe_cr,sgx,sdhe_log1,sdhe_binder,sdhe_log1',sr,sgy,log2,log3,m),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,cats,sats,ems),i7);
    let sdhe_sats: key = sats in
    out(dhe_io18,ServerFinishedOut(m));
    in(dhe_io19,ClientFinishedIn(log4, cfin));
@@ -756,8 +761,8 @@ let ServerDHE =
    let sdhe_ems: key = ems in
    let sdhe_resumption_secret: key = resumption_secret in
    (* We compose 
-      - with the record protocol with secret cdhe_cats, by Lemma REFlem:compos2 (ServerTermDHE is event e2) and 
-      - with the PSK/PSKDHE handshake with secret cdhe_resumption_secret, by Lemma REFlem:compos2_hash (ServerTermDHE is event e2) *)
+      - with the record protocol with secret cdhe_cats (ServerTermDHE is event e2) and 
+      - with the PSK/PSKDHE handshake with secret cdhe_resumption_secret (ServerTermDHE is event e2) *)
    event ServerTermDHE((sdhe_cr,sgx,sdhe_log1,sdhe_binder,sdhe_log1',sr,sgy,log2,log3,m,log4,cfin),(client_hk,server_hk,client_hiv,server_hiv,cfk,sfk,sdhe_cats,sdhe_sats,sdhe_ems,sdhe_resumption_secret));
    out(dhe_io30, ())).
 
@@ -809,3 +814,8 @@ random values, shared by Client, Server, ClientDHE, ServerDHE.
 The commented version is the one we use for the composition results. 
 
 *)
+
+(* EXPECTED
+All queries proved.
+482.898s (user 482.646s + system 0.252s), max rss 1711360K
+END *)

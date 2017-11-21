@@ -1,30 +1,30 @@
 HKDFexpand
 All queries proved.
-0.024s (user 0.020s + system 0.004s), max rss 29424K
+0.024s (user 0.020s + system 0.004s), max rss 40944K
 KeySchedule1
 All queries proved.
-0.036s (user 0.028s + system 0.008s), max rss 36752K
+0.072s (user 0.072s + system 0.000s), max rss 42544K
 KeySchedule2
 All queries proved.
-0.028s (user 0.024s + system 0.004s), max rss 33808K
+0.060s (user 0.060s + system 0.000s), max rss 39600K
 KeySchedule3
 All queries proved.
-0.480s (user 0.472s + system 0.008s), max rss 53424K
+0.544s (user 0.540s + system 0.004s), max rss 58672K
 tls13-core-InitialHandshake
 All queries proved.
-115.935s (user 115.751s + system 0.184s), max rss 2171776K
+115.692s (user 115.572s + system 0.120s), max rss 2293248K
 tls13-core-InitialHandshake-1RTTonly
 All queries proved.
-121.572s (user 121.412s + system 0.160s), max rss 2199040K
+119.500s (user 119.400s + system 0.100s), max rss 2278192K
 tls13-core-PSKandPSKDHE-NoCorruption
 All queries proved.
-482.898s (user 482.646s + system 0.252s), max rss 1711360K
+380.880s (user 380.772s + system 0.108s), max rss 1587888K
 tls13-core-RecordProtocol
 All queries proved.
-0.044s (user 0.044s + system 0.000s), max rss 31312K
+0.040s (user 0.036s + system 0.004s), max rss 37632K
 tls13-core-RecordProtocol-0RTT
 All queries proved.
-0.044s (user 0.044s + system 0.000s), max rss 31408K
+0.036s (user 0.036s + system 0.000s), max rss 40864K
 tls13-core-RecordProtocol-0RTT-badkey
 All queries proved.
-0.036s (user 0.028s + system 0.008s), max rss 30032K
+0.024s (user 0.024s + system 0.000s), max rss 38656K

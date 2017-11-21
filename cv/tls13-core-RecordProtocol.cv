@@ -142,3 +142,8 @@ process
 	let iv = HKDF_expand_iv_label(traffic_secret_N) in
 	out(io2, ());
 	(send | receive)
+
+(* EXPECTED
+All queries proved.
+0.044s (user 0.044s + system 0.000s), max rss 31312K
+END *)

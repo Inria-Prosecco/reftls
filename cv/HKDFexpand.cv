@@ -76,3 +76,8 @@ process
 	new b: bool;
 	if b then out(start, ()); processLeft
 	     else out(start, ()); processRight
+
+(* EXPECTED
+All queries proved.
+0.024s (user 0.020s + system 0.004s), max rss 29424K
+END *)

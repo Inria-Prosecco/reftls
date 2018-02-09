@@ -23,7 +23,7 @@ They use the library `tls-lib.pvl` provided below.
 
 ### Understanding the results
 
-ProVerif generates a large amount of input, so you may want to run:
+ProVerif generates a large amount of output, so you may want to run:
     proverif -lib tls-lib <filename> | tee results.txt | grep ^RESULT
 which will put all the results in a file results.txt and summarize the success or failure of various security queries.
 (Warning: verifying this model takes a long time and a significant amount of RAM even on powerful workstations.)

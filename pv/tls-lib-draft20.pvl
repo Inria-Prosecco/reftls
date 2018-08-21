@@ -152,7 +152,7 @@ event WeakOrCompromisedKey(pubkey).
 event CompromisedPreSharedKey(preSharedKey).
 event PostSessionCompromisedKey(pubkey).
 
-let longTermKeys() = 
+let longTermKeysProc() = 
     event WeakOrCompromisedKey(NoPubKey)
  |  (in(io,a:prin);
      new k:privkey; 

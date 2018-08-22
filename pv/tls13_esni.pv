@@ -1,4 +1,5 @@
 event ESNIClientDone(bitstring,element,pubkey).
+event ESNIClientLeak(bitstring,element,pubkey).
 event ESNIServerDone(bitstring,element,pubkey).
 
 let ClientESNI() =
@@ -18,8 +19,8 @@ let ClientESNI() =
      let esni = ESNI(g,gc,enc_sni) in
 
      out(io,(cr,gx,esni));
-
-     in (io,(gy:element,msg:bitstring));
+     
+     in (io,(gy:element,msg:bitstring,sig:bitstring));
      if gy <> BadElement then
 
      let log = (cr,gx,esni,gy) in
@@ -28,9 +29,13 @@ let ClientESNI() =
      let aek = hkdf_expand_label(kxy,tls13_key,log) in
      let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
 
-     let msg2bytes(CRT(=sni,p)) = aead_dec(StrongAE,b2ae(aek),aeiv,zero,msg) in
-     event ESNIClientDone(sni,gs,p);
-     0.
+     let msg2bytes(CRT(recv_sni,p)) = aead_dec(StrongAE,b2ae(aek),aeiv,zero,msg) in
+     get longTermKeys(=host,xxxx,p) in
+     if verify(p,log,sig) = true then 
+       if recv_sni = sni then 
+          event ESNIClientDone(sni,gs,p)
+       else 
+          event ESNIClientLeak(sni,gs,p).
 
 
 let ServerESNI() =
@@ -57,14 +62,17 @@ let ServerESNI() =
      let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
 
      let enc_crt = aead_enc(StrongAE,b2ae(aek),aeiv,zero,msg2bytes(CRT(sni,p))) in
-     out(io,(gy,enc_crt));
+     let sig = sign(sk,log) in
+     out(io,(gy,enc_crt,sig));
      event ESNIServerDone(sni,gs,p);
      0.
 
 query h:bitstring, gs:element, p:pubkey;
       event(ESNIClientDone(h,gs,p));
       event(ESNIServerDone(h,gs,p)).
-query host:prin;
+query host:prin,h:bitstring, gs:element, p:pubkey;
+      event(ESNIClientLeak(h,gs,p)) ==> event(WeakOrCompromisedKey(p));
+      event(ESNIClientLeak(h,gs,p));
       attacker(secret_sni(host)).
 process
      !ClientESNI() | !ServerESNI() | !LongTermKeys()

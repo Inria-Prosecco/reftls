@@ -1,0 +1,66 @@
+event ESNIClientDone(bitstring,element,pubkey).
+event ESNIServerDone(bitstring,element,pubkey).
+
+let ClientESNI() =
+     in(io,host:prin);
+     get esniKeys(=host,=StrongDH,xxx,gs) in
+     let g = StrongDH in
+     let sni = secret_sni(host) in
+     
+     new cr:random;
+     let (x:bitstring,gx:element) = dh_keygen(g) in
+     let (c:bitstring,gc:element) = dh_keygen(g) in
+     let gcs = e2b(dh_exp(g,gs,c)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let enc_sni = aead_enc(StrongAE,b2ae(aek),aeiv,e2b(gx),sni) in
+     let esni = ESNI(g,gc,enc_sni) in
+
+     out(io,(cr,gx,esni));
+
+     in (io,(gy:element,msg:bitstring));
+     let log = (cr,gx,esni,gy) in
+     let gxy = e2b(dh_exp(g,gy,x)) in
+     let kxy = hkdf_extract(zero,gxy) in
+     let aek = hkdf_expand_label(kxy,tls13_key,log) in
+     let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
+
+     let msg2bytes(CRT(=sni,p)) = aead_dec(StrongAE,b2ae(aek),aeiv,zero,msg) in
+     event ESNIClientDone(sni,gs,p);
+     0.
+
+
+let ServerESNI() =
+     in(io,host:prin);
+     get esniKeys(=host,=StrongDH,s,gs) in
+     get longTermKeys(=host,sk,p) in
+     let g = StrongDH in
+     
+     in(io,(cr:random,gx:element,esni:sni));
+     let ESNI(g,gc,enc_sni) = esni in
+     let gcs = e2b(dh_exp(g,gc,s)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let sni = aead_dec(StrongAE,b2ae(aek),aeiv,e2b(gx),enc_sni) in
+
+     let (y:bitstring,gy:element) = dh_keygen(g) in
+     let log = (cr,gx,esni,gy) in 
+     let gxy = e2b(dh_exp(g,gx,y)) in
+     let kxy = hkdf_extract(zero,gxy) in
+     let aek = hkdf_expand_label(kxy,tls13_key,log) in
+     let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
+
+     let enc_crt = aead_enc(StrongAE,b2ae(aek),aeiv,zero,msg2bytes(CRT(sni,p))) in
+     out(io,(gy,enc_crt));
+     event ESNIServerDone(sni,gs,p);
+     0.
+
+query h:bitstring, gs:element, p:pubkey;
+      event(ESNIClientDone(h,gs,p));
+      event(ESNIServerDone(h,gs,p)).
+query host:prin;
+      attacker(secret_sni(host)).
+process
+     !ClientESNI() | !ServerESNI() | !LongTermKeys()

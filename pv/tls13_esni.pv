@@ -20,6 +20,8 @@ let ClientESNI() =
      out(io,(cr,gx,esni));
 
      in (io,(gy:element,msg:bitstring));
+     if gy <> BadElement then
+
      let log = (cr,gx,esni,gy) in
      let gxy = e2b(dh_exp(g,gy,x)) in
      let kxy = hkdf_extract(zero,gxy) in
@@ -39,6 +41,8 @@ let ServerESNI() =
      
      in(io,(cr:random,gx:element,esni:sni));
      let ESNI(g,gc,enc_sni) = esni in
+     if gx <> BadElement then
+     if gc <> BadElement then
      let gcs = e2b(dh_exp(g,gc,s)) in
      let kcs = hkdf_extract(zero,gcs) in
      let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in

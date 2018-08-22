@@ -553,7 +553,7 @@ let Server12() =
 
    
 let Client13() = 
-    (get preSharedKeys(a,b,psk) in
+    (get preSharedKeys(alice,bob,psk) in
      in (io,ioffer:params);
      let nego(=TLS13,DHE_13(g,eee),hhh,aaa,pt) = ioffer in
      new cr:random;
@@ -597,11 +597,12 @@ let Client13() =
 
         event ClientFinished(TLS13,cr,sr,psk,p,offer,mode,cak,sak,ems,rms);
         insert clientSession(cr,sr,psk,p,offer,mode,cak,sak,ems,rms);
+(*        insert preSharedKeys(alice,bob,PSK(rms)); *)
         out(io,FIN(m2)))).
 
     
 let Server13() = 
-    (get preSharedKeys(a,b,psk) in
+    (get preSharedKeys(alice,bob,psk) in
      in(io,ch:msg); 
      let CH(cr,offer) = ch in
      let nego(=TLS13,DHE_13(g,gx),hhh,aaa,Binder(m)) = offer in
@@ -651,6 +652,7 @@ let Server13() =
 	let rms =  kdf_psk(master_secret,log) in
         event ServerFinished(TLS13,cr,sr,psk,p,offer,mode,cak,sak,ems,rms);	 
         insert serverSession(cr,sr,psk,p,offer,mode,cak,sak,ems,rms);
+(*        insert preSharedKeys(alice,bob,PSK(rms)); *)
         phase 1; 
         event PostSessionCompromisedKey(pk(sk));
 	out(io,sk)).

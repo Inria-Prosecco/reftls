@@ -103,7 +103,6 @@ const NoPubKey:pubkey.
 (* RSA Signatures, typically the argument is a hash over some data *)
 
 fun sign(privkey,bitstring):bitstring.
-
 fun verify(pubkey,bitstring,bitstring): bool
 reduc forall k:privkey, x:bitstring;
       verify(pk(k),x,sign(k,x)) = true.
@@ -136,7 +135,10 @@ otherwise forall k:privkey, x:bitstring;
 (********************************************************)
 
 type prin.
+fun prin2b(prin):bitstring [data].
 table longTermKeys(prin,privkey,pubkey).
+table esniKeys(prin,group,bitstring,element).
+
 
 type preSharedKey.
 const NoPSK: preSharedKey.
@@ -152,13 +154,15 @@ event WeakOrCompromisedKey(pubkey).
 event CompromisedPreSharedKey(preSharedKey).
 event PostSessionCompromisedKey(pubkey).
 
-let longTermKeys() = 
+let LongTermKeys() = 
     event WeakOrCompromisedKey(NoPubKey)
  |  (in(io,a:prin);
-     new k:privkey; 
+     new k:privkey;
+     let (x:bitstring,gx:element) = dh_keygen(StrongDH) in
+     insert esniKeys(a,StrongDH,x,gx);
      insert longTermKeys(a,k,pk(k));
      out(io,pk(k)))
- |  (in(io,(a:prin,k:privkey));
+ |  (in(io,(a:prin,k:privkey,x:bitstring));
      event WeakOrCompromisedKey(pk(k));
      insert longTermKeys(a,k,pk(k)))
  |  (in(io,(a:prin,b:prin));
@@ -211,7 +215,8 @@ const tls13_client_handshake_traffic_secret,
       tls13_exporter_master_secret, 
       tls13_resumption_master_secret, 
       tls13_resumption_psk_binder_key,
-      tls13_finished,tls13_derived: label.
+      tls13_finished,tls13_derived,tls13_esni_key,tls13_esni_iv: label.
+
 
 fun tls12_prf(bitstring,label,bitstring): bitstring.
 
@@ -228,6 +233,7 @@ letfun derive_secret(k:bitstring,l:label,m:bitstring) =
        hkdf_expand_label(k,l,hash(StrongHash,m)).
 
 letfun kdf_0() = hkdf_extract(zero,zero).
+
 
 letfun kdf_es(psk:preSharedKey) = 
        let es = hkdf_extract(zero,psk2b(psk)) in
@@ -274,6 +280,7 @@ letfun kdf_psk(ms:bitstring, log:bitstring) =
 (********************************************************)
 
 type random.
+fun random2b(random):bitstring [data].
 type version.
 const TLS12, TLS13: version.
 type kex_alg.
@@ -285,14 +292,19 @@ type psk_type.
 fun Binder(bitstring): psk_type [data].
 fun NoBinder(): psk_type [data].
 
+fun secret_sni(prin): bitstring [private]. 
+
+type sni.
+fun SNI(bitstring): sni [data].
+fun ESNI(group,element,bitstring): sni [data].
 type params.
-fun nego(version,kex_alg,hash_alg,ae_alg,psk_type): params [data].
+fun nego(version,kex_alg,hash_alg,ae_alg,sni,psk_type): params [data].
 
 type msg.
 fun msg2bytes(msg):bitstring [data,typeConverter].
 fun CH(random,params):msg [data].
 fun SH(random,params):msg [data].
-fun CRT(pubkey):msg [data].
+fun CRT(bitstring,pubkey):msg       [data].
 fun SKE(group,element,bitstring):msg [data].
 fun CKE(bitstring): msg [data].
 fun CV(bitstring):msg [data].
@@ -353,11 +365,11 @@ event ServerAEKeyLeaked0(version,random,preSharedKey,params).
 
 let secrecyQuery() = 
     (get clientSession(cr,sr,psk,p,o,m,ck,sk,cb,ms) in
-     let nego(v,kkk,hhh,aaa,ppp) = m in
+     let nego(v,kkk,hhh,aaa,sss,ppp) = m in
      in (io,=ck);
      event ClientAEKeyLeaked(v,cr,sr,psk,p)) 
  |  (get serverSession(cr,sr,psk,p,o,m,ck,sk,cb,ms) in
-     let nego(v,kkk,hhh,aaa,ppp) = m in
+     let nego(v,kkk,hhh,aaa,sss,ppp) = m in
      in (io,=sk);
      event ServerAEKeyLeaked(v,cr,sr,psk,p))
  |  (get clientSession0(cr,psk,o,ck,ems) in
@@ -384,20 +396,20 @@ let channelBindingQuery() =
 	 event MatchingEMS0(TLS13,cr,psk,o,cr',psk',o'))
 |   (get clientSession(cr,sr,psk,p,o,m,ck,sk,cb,ms) in
      get serverSession(cr',sr',psk',p',o',m',ck',sk',=cb,ms') in
-     let nego(v,kkk,hhh,aaa,ppp) = m in
-     let nego(v',kkk',hhh',aaa',ppp') = m' in
+     let nego(v,kkk,hhh,aaa,sss,ppp) = m in
+     let nego(v',kkk',hhh',aaa',sss',ppp') = m' in
      if (cr <> cr' || sr <> sr' || p <> p') then
 	 event MatchingChannelBinding(v,cr,sr,p,v',cr',sr',p'))
 |   (get clientSession(cr,sr,psk,p,o,m,ck,sk,cb,ms) in
      get serverSession(cr',sr',psk',p',o',m',ck',sk',cb',=ms) in
-     let nego(v,kkk,hhh,aaa,ppp) = m in
-     let nego(v',kkk',hhh',aaa',ppp') = m' in
+     let nego(v,kkk,hhh,aaa,sss,ppp) = m in
+     let nego(v',kkk',hhh',aaa',sss',ppp') = m' in
      if (cr <> cr' || sr <> sr' || p <> p') then
 	 event MatchingResumptionSecret(v,cr,sr,p,v',cr',sr',p'))
 |   (get clientSession(cr,sr,psk,p,o,m,ck,sk,cb,ms) in
      get serverSession(cr',sr',psk',p',o',m',=ck,=sk,cb',ms') in
-     let nego(v,kkk,hhh,aaa,ppp) = m in
-     let nego(v',kkk',hhh',aaa',ppp') = m' in
+     let nego(v,kkk,hhh,aaa,sss,ppp) = m in
+     let nego(v',kkk',hhh',aaa',sss',ppp') = m' in
      if (cr <> cr' || sr <> sr' || p <> p') then
 	 event MatchingAEKey(v,cr,sr,p,v',cr',sr',p')).
 
@@ -453,11 +465,11 @@ let Client12() =
      in(io,offer:params);
      out(io,CH(cr,offer));
      in(io,SH(sr,mode));	
-     let nego(=TLS12,k,h,a,pt) = mode in
+     let nego(=TLS12,k,h,a,sni,pt) = mode in
      let v = TLS12 in
      let log = (CH(cr,offer),SH(sr,mode)) in
-     in(io,CRT(p));
-     let log = (log,CRT(p)) in
+     in(io,CRT(hn,p));
+     let log = (log,CRT(hn,p)) in
      get longTermKeys(sn,xxx,=p) in
      let DHE(g) = k in
       (in(io,SKE(=g,e,s));
@@ -496,7 +508,7 @@ let Client12() =
 let Server12() = 
     (in(io,CH(cr,offer));
      in(io,SH(xxx,mode));
-     let nego(=TLS12,k,h,a,pt) = mode in
+     let nego(=TLS12,k,h,a,sni,pt) = mode in
      let v = TLS12 in
      new sr:random;
      out(io,SH(sr,mode));
@@ -506,8 +518,8 @@ let Server12() =
      event ServerChoosesKEX(cr,sr,p,v,k);
      event ServerChoosesAE(cr,sr,p,v,a);
      event ServerChoosesHash(cr,sr,p,v,h);
-     out(io,CRT(p));
-     let log = (log,CRT(p)) in
+     out(io,CRT(prin2b(sn),p));
+     let log = (log,CRT(prin2b(sn),p)) in
      let DHE(g) = k in
       (let (y:bitstring, gy:element) = dh_keygen(g) in
        let sg = sign(sk,hash(h,(cr,sr,g,gy))) in
@@ -553,39 +565,53 @@ let Server12() =
 (*  TLS 1.3 0+1-RTT Processes: no client auth, uses psk (potentially NoPSK) *)
 (********************************************************)
 
-   
-let Client13() = 
-    (get preSharedKeys(a,b,psk) in
+let Client13() =
+    (get preSharedKeys(a,sn,psk) in
      in (io,ioffer:params);
-     let nego(=TLS13,DHE_13(g,eee),hhh,aaa,pt) = ioffer in
+     let nego(=TLS13,DHE_13(g,eee),hhh,aaa,sss,pt) = ioffer in
+
      new cr:random;
      let (x:bitstring,gx:element) = dh_keygen(g) in
      let (early_secret:bitstring,kb:mac_key) = kdf_es(psk) in
-     let zoffer = nego(TLS13,DHE_13(g,gx),hhh,aaa,Binder(zero)) in
+
+     get esniKeys(=sn,=g,xxx,gs) in
+     let (c:bitstring,gc:element) = dh_keygen(g) in
+     let gcs = e2b(dh_exp(g,gs,c)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let esnib = aead_enc(StrongAE,b2ae(aek),aeiv,zero,secret_sni(sn)) in
+     let esni = ESNI(g,gc,esnib) in
+     let zoffer = nego(TLS13,DHE_13(g,gx),hhh,aaa,esni,Binder(zero)) in
      let pt = Binder(hmac(StrongHash,kb,msg2bytes(CH(cr,zoffer)))) in
-     let offer = nego(TLS13,DHE_13(g,gx),hhh,aaa,pt) in
+     let offer = nego(TLS13,DHE_13(g,gx),hhh,aaa,esni,pt) in
      let ch = CH(cr,offer) in
      event ClientOffersVersion(cr,TLS13);
      event ClientOffersKEX(cr,DHE_13(g,gx));
      event ClientOffersAE(cr,aaa);
      event ClientOffersHash(cr,hhh);
      out(io,ch);
+
      let (kc0:ae_key,ems0:bitstring) = kdf_k0(early_secret,msg2bytes(ch)) in
      insert clientSession0(cr,psk,offer,kc0,ems0);
-
-     in(io,SH(sr,mode));	
-     let nego(=TLS13,DHE_13(=g,gy),h,a,spt) = mode in
+     (* recv msg; check tag = SH; put contents into sr, mode;*)
+     
+     in(io,SH(sr,mode));
+     let nego(=TLS13,DHE_13(=g,gy),h,a,sss,spt) = mode in
      let log = (ch,SH(sr,mode)) in
 
      let gxy = e2b(dh_exp(g,gy,x)) in
      let handshake_secret = kdf_hs(early_secret,gxy) in
      let (master_secret:bitstring,chk:ae_key,shk:ae_key,cfin:mac_key,sfin:mac_key) = 
-         kdf_ms(handshake_secret,log) in 
-     out(io,(chk,shk));
+         kdf_ms(handshake_secret,log) in
+	 
+(*     out(io,(chk,shk));*)
 
-     in(io,CRT(p));
-     let log = (log,CRT(p)) in
+     in(io,crt_msg:bitstring);
+     let msg2bytes(CRT(hn,p)) = aead_dec(StrongAE,shk,zero,zero,crt_msg) in
+     let log = (log,CRT(hn,p)) in
      get longTermKeys(sn,xxx,=p) in
+     
      in(io,CV(s));
      if verify(p,hash(h,log),s) = true then
      let log = (log,CV(s)) in
@@ -606,9 +632,18 @@ let Server13() =
     (get preSharedKeys(a,b,psk) in
      in(io,ch:msg); 
      let CH(cr,offer) = ch in
-     let nego(=TLS13,DHE_13(g,gx),hhh,aaa,Binder(m)) = offer in
+     let nego(=TLS13,DHE_13(g,gx),hhh,aaa,esni,Binder(m)) = offer in
+
+     let ESNI(=g,gc,enc_sni) = esni in
+     get esniKeys(=b,=g,s,gs) in
+     let gcs = e2b(dh_exp(g,gc,s)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let sni = aead_dec(StrongAE,b2ae(aek),aeiv,zero,enc_sni) in
+
      let (early_secret:bitstring,kb:mac_key) = kdf_es(psk) in
-     let zoffer = nego(TLS13,DHE_13(g,gx),hhh,aaa,Binder(zero)) in
+     let zoffer = nego(TLS13,DHE_13(g,gx),hhh,aaa,esni,Binder(zero)) in
      if m = hmac(StrongHash,kb,msg2bytes(CH(cr,zoffer))) then
      let (kc0:ae_key,ems0:bitstring) = 
          kdf_k0(early_secret,msg2bytes(ch)) in
@@ -616,9 +651,9 @@ let Server13() =
 
      new sr:random;
      in(io,SH(xxx,mode));
-     let nego(=TLS13,DHE_13(=g,eee),h,a,pt) = mode in
+     let nego(=TLS13,DHE_13(=g,eee),h,a,sss,pt) = mode in
      let (y:bitstring,gy:element) = dh_keygen(g) in
-     let mode = nego(TLS13,DHE_13(g,gy),h,a,pt) in
+     let mode = nego(TLS13,DHE_13(g,gy),h,a,sss,pt) in
      out(io,SH(sr,mode));
      let log = (ch,SH(sr,mode)) in
      get longTermKeys(sn,sk,p) in
@@ -631,10 +666,12 @@ let Server13() =
      let handshake_secret = kdf_hs(early_secret,gxy) in
      let (master_secret:bitstring,chk:ae_key,shk:ae_key,cfin:mac_key,sfin:mac_key) = 
          kdf_ms(handshake_secret,log) in
-     out(io,(chk,shk));
+(*     out(io,(chk,shk)); *)
 
-     out(io,CRT(p));
-     let log = (log,CRT(p)) in
+     let crt_msg = aead_enc(StrongAE,shk,zero,zero,msg2bytes(CRT(sni,p))) in
+
+     out(io,crt_msg);
+     let log = (log,CRT(sni,p)) in
      let sg = sign(sk,hash(h,log)) in
      out(io,CV(sg));
      let log = (log,CV(sg)) in
@@ -675,47 +712,47 @@ fun m_c(version,random,random,pubkey,preSharedKey): bitstring [private].
 
 let appData() =
     (get clientSession0(cr,psk,o,kc0,ems0) in
-     let nego(v,kkk,hhh,a,pt) = o in
+     let nego(v,kkk,hhh,a,sss,pt) = o in
      in (io,(n:bitstring, ad:bitstring));
      let mesg = m_c0(TLS13,cr,psk) in
      event ClientSends0(TLS13,cr,psk,n,ad,mesg);
      out (io,aead_enc(a,kc0,n,ad,mesg)))
   |
     (get serverSession0(cr,psk,o,kc0,ems0) in
-     let nego(v,kkk,hhh,a,pt) = o in
+     let nego(v,kkk,hhh,a,sss,pt) = o in
      in (io,(n:bitstring, ad:bitstring, c:bitstring));
      let f = aead_dec(a,kc0,n,ad,c) in
      event ServerReceives0(TLS13,cr,psk,n,ad,f))
   |
     (get serverSession0_5(cr,sr,psk,ps,o,m,kc,ks,ems) in
-     let nego(v,kkk,hhh,a,pt) = m in
+     let nego(v,kkk,hhh,a,sss,pt) = m in
      in (io,(n:bitstring, ad:bitstring));
      let mesg = m_s(v,cr,sr,ps,psk) in
      event ServerSends(v,cr,sr,psk,ps,n,ad,mesg);
      out (io,aead_enc(a,ks,n,ad,mesg)))
   |
     (get clientSession(cr,sr,psk,ps,o,m,kc,ks,ems,rms) in
-     let nego(v,kkk,hhh,a,pt) = m in
+     let nego(v,kkk,hhh,a,sss,pt) = m in
      in (io,(n:bitstring, ad:bitstring));
      let mesg = m_c(v,cr,sr,ps,psk) in
      event ClientSends(v,cr,sr,psk,ps,n,ad,mesg);
      out (io,aead_enc(a,kc,n,ad,mesg)))
   |
     (get serverSession(cr,sr,psk,ps,o,m,kc,ks,ems,rms) in
-     let nego(v,kkk,hhh,a,pt) = m in
+     let nego(v,kkk,hhh,a,sss,pt) = m in
      in (io,(n:bitstring, ad:bitstring, c:bitstring));
      let f = aead_dec(a,kc,n,ad,c) in
      event ServerReceives(v,cr,sr,psk,ps,n,ad,f))
   |
     (get serverSession(cr,sr,psk,ps,o,m,kc,ks,ems,rms) in
-     let nego(v,kkk,hhh,a,pt) = m in
+     let nego(v,kkk,hhh,a,sss,pt) = m in
      in (io,(n:bitstring, ad:bitstring));
      let mesg = m_s(v,cr,sr,ps,psk) in
      event ServerSends(v,cr,sr,psk,ps,n,ad,mesg);
      out (io,aead_enc(a,ks,n,ad,mesg)))
   |
     (get clientSession(cr,sr,psk,ps,o,m,kc,ks,ems,rms) in
-     let nego(v,kkk,hhh,a,pt) = m in
+     let nego(v,kkk,hhh,a,sss,pt) = m in
      in (io,(n:bitstring, ad:bitstring, c:bitstring));
      let f = aead_dec(a,ks,n,ad,c) in
      event ClientReceives(v,cr,sr,psk,ps,n,ad,f))

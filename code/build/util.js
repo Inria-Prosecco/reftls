@@ -10,7 +10,8 @@ const pad = function (l) {
 	return v;
 };
 const mem = function (v, a) {
-	return a.indexOf(v) !== -1;
+    if (a) return a.indexOf(v) !== -1;
+    else return false;
 };
 const hex2a = function (hex) {
 	var str = '';

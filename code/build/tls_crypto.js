@@ -24,7 +24,8 @@ const aes_gcm_encrypt = function (k, n, p, ad) {
 			c.setAutoPadding(false);
 			var res = c.update(pb).toString('hex');
 			res += c.final().toString('hex');
-			res += c.getAuthTag().toString('hex');
+			let tag = c.getAuthTag().toString('hex');
+			res += "00000000000000000000000000000000";
 			return res;
 };
 

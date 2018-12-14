@@ -136,7 +136,7 @@ otherwise forall k:privkey, x:bitstring;
 (********************************************************)
 
 type prin.
-table longTermKeys(prin,privkey,pubkey).
+table longTermKeys_tbl(prin,privkey,pubkey).
 
 type preSharedKey.
 const NoPSK: preSharedKey.
@@ -156,11 +156,11 @@ let longTermKeys() =
     event WeakOrCompromisedKey(NoPubKey)
  |  (in(io,a:prin);
      new k:privkey; 
-     insert longTermKeys(a,k,pk(k));
+     insert longTermKeys_tbl(a,k,pk(k));
      out(io,pk(k)))
  |  (in(io,(a:prin,k:privkey));
      event WeakOrCompromisedKey(pk(k));
-     insert longTermKeys(a,k,pk(k)))
+     insert longTermKeys_tbl(a,k,pk(k)))
  |  (in(io,(a:prin,b:prin));
      new pskAB:bitstring; 
      insert preSharedKeys(a,b,PSK(pskAB)))
@@ -181,9 +181,9 @@ let fixedLongTermKeys() =
      new pskAB: bitstring;
      new pskAM: bitstring;
      new pskMB: bitstring;
-     insert longTermKeys(A,skA,pkA);
-     insert longTermKeys(B,skB,pkB);
-     insert longTermKeys(M,skM,pkM);
+     insert longTermKeys_tbl(A,skA,pkA);
+     insert longTermKeys_tbl(B,skB,pkB);
+     insert longTermKeys_tbl(M,skM,pkM);
      insert preSharedKeys(A,B,PSK(pskAB));     
      insert preSharedKeys(A,M,PSK(pskAM));     
      insert preSharedKeys(M,B,PSK(pskMB));     
@@ -456,7 +456,7 @@ let Client12() =
      let log = (CH(cr,offer),SH(sr,mode)) in
      in(io,CRT(p));
      let log = (log,CRT(p)) in
-     get longTermKeys(sn,xxx,=p) in
+     get longTermKeys_tbl(sn,xxx,=p) in
      let DHE(g) = k in
       (in(io,SKE(=g,e,s));
        let log = (log,SKE(g,e,s)) in
@@ -499,7 +499,7 @@ let Server12() =
      new sr:random;
      out(io,SH(sr,mode));
      let log = (CH(cr,offer),SH(sr,mode)) in
-     get longTermKeys(sn,sk,p) in
+     get longTermKeys_tbl(sn,sk,p) in
      event ServerChoosesVersion(cr,sr,p,v);
      event ServerChoosesKEX(cr,sr,p,v,k);
      event ServerChoosesAE(cr,sr,p,v,a);
@@ -583,7 +583,7 @@ let Client13() =
 
      in(io,CRT(p));
      let log = (log,CRT(p)) in
-     get longTermKeys(sn,xxx,=p) in
+     get longTermKeys_tbl(sn,xxx,=p) in
      in(io,CV(s));
      if verify(p,hash(h,log),s) = true then
      let log = (log,CV(s)) in
@@ -619,7 +619,7 @@ let Server13() =
      let mode = nego(TLS13,DHE_13(g,gy),h,a,pt) in
      out(io,SH(sr,mode));
      let log = (ch,SH(sr,mode)) in
-     get longTermKeys(sn,sk,p) in
+     get longTermKeys_tbl(sn,sk,p) in
      event ServerChoosesVersion(cr,sr,p,TLS13);
      event ServerChoosesKEX(cr,sr,p,TLS13,DHE_13(g,gy));
      event ServerChoosesAE(cr,sr,p,TLS13,a);

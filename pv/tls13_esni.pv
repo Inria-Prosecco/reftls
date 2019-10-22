@@ -1,50 +1,68 @@
 event ESNIClientDone(bitstring,element,pubkey).
 event ESNIClientLeak(bitstring,element,pubkey).
+event ESNIServerLeak(bitstring,element,bitstring).
 event ESNIServerDone(bitstring,element,pubkey).
+(*event Reachable(). *)
 
-let ClientESNI() =
-     in(io,host:prin);
+let ClientESNI_PSK() =
+     in(io,(host:prin,origin_host:prin));
+     get preSharedKeys(a,=origin_host,tkt,psk) in
+     let (early_secret:bitstring,kb:mac_key) = kdf_es(psk) in
+     if tkt <> zero then
      get esniKeys(=host,=StrongDH,xxx,gs) in
      let g = StrongDH in
-     let sni = secret_sni(host) in
-     
+     let sni = secret_sni(origin_host) in
+
      new cr:random;
      let (x:bitstring,gx:element) = dh_keygen(g) in
+
      let (c:bitstring,gc:element) = dh_keygen(g) in
+     new sni_nonce:random;
      let gcs = e2b(dh_exp(g,gs,c)) in
      let kcs = hkdf_extract(zero,gcs) in
      let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
      let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
-     let enc_sni = aead_enc(StrongAE,b2ae(aek),aeiv,e2b(gx),sni) in
-     let esni = ESNI(g,gc,enc_sni) in
+     let enc_sni = aead_enc(StrongAE,b2ae(aek),aeiv,(e2b(gx),tkt),(sni_nonce,sni)) in
+     let sni_ext = SNI(e2b(gs)) in
+     let esni_ext = ESNI(g,gc,enc_sni) in
 
-     out(io,(cr,gx,esni));
-     
-     in (io,(gy:element,msg:bitstring,sig:bitstring));
+     let ch0 = (cr,gx,sni_ext,esni_ext,tkt) in
+     let binder = hmac(StrongHash,kb,ch0) in
+     let ch = (ch0,binder) in
+     out(io,ch);
+
+     in (io,(gy:element,msg:bitstring));
      if gy <> BadElement then
 
-     let log = (cr,gx,esni,gy) in
+     let log = (ch,gy) in
      let gxy = e2b(dh_exp(g,gy,x)) in
-     let kxy = hkdf_extract(zero,gxy) in
+     let kxy = hkdf_extract(early_secret,gxy) in
      let aek = hkdf_expand_label(kxy,tls13_key,log) in
      let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
 
-     let msg2bytes(CRT(recv_sni,p)) = aead_dec(StrongAE,b2ae(aek),aeiv,zero,msg) in
-     get longTermKeys(=host,xxxx,p) in
-     if verify(p,log,sig) = true then 
-       if recv_sni = sni then 
-          event ESNIClientDone(sni,gs,p)
-       else 
-          event ESNIClientLeak(sni,gs,p).
+     let (=sni_nonce,(recv_sni:bitstring,p:pubkey),sig:bitstring) =
+     	 aead_dec(StrongAE,b2ae(aek),aeiv,zero,msg) in
+     let log = (log,sni_nonce,(sni,p)) in
+
+     get longTermKeys(=origin_host,xxxx,p) in
+     if recv_sni = sni then (
+	  if verify(p,log,sig) = true then
+	     event ESNIClientDone(sni,gs,p))
+     else (
+          event ESNIClientLeak(sni,gs,p);
+	  out(io,sni)).
 
 
-let ServerESNI() =
+let ServerESNI_PSK() =
      in(io,host:prin);
      get esniKeys(=host,=StrongDH,s,gs) in
      get longTermKeys(=host,sk,p) in
      let g = StrongDH in
-     
-     in(io,(cr:random,gx:element,esni:sni));
+
+     in(io,(ch:bitstring));
+     let (ch0:bitstring,binder:bitstring) = ch in
+     let (cr:random,gx:element,sn_ext:sni,esni:sni,tkt:bitstring) = ch0 in
+
      let ESNI(g,gc,enc_sni) = esni in
      if gx <> BadElement then
      if gc <> BadElement then
@@ -52,27 +70,238 @@ let ServerESNI() =
      let kcs = hkdf_extract(zero,gcs) in
      let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
      let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
-     let sni = aead_dec(StrongAE,b2ae(aek),aeiv,e2b(gx),enc_sni) in
+     let (sni_nonce:random,sni:bitstring) =
+     	 aead_dec(StrongAE,b2ae(aek),aeiv,(e2b(gx),tkt),enc_sni) in
+
+     let origin_host = get_host(global_sni_secret(),sni) in
+     get ticketEncryptionKeys(=origin_host,keyT) in
+     let psk = aead_dec(StrongAE,keyT,zero,zero,tkt) in (
+          let (early_secret:bitstring,kb:mac_key) = kdf_es(PSK(psk)) in
+	  if binder = hmac(StrongHash,kb,ch0) then
+
+	  let (y:bitstring,gy:element) = dh_keygen(g) in
+	  let log = (ch,gy) in
+	  let gxy = e2b(dh_exp(g,gx,y)) in
+	  let kxy = hkdf_extract(early_secret,gxy) in
+	  let aek = hkdf_expand_label(kxy,tls13_key,log) in
+	  let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
+
+	  let log = (log,sni_nonce,(sni,p)) in
+	  let sig = sign(sk,log) in
+	  let enc_sflt = aead_enc(StrongAE,b2ae(aek),aeiv,zero,
+	  (sni_nonce,(sni,p),sig)) in
+	  out(io,(gy,enc_sflt));
+	  event ESNIServerDone(sni,gs,p))
+     else (event ESNIServerLeak(sni,gs,tkt);
+     	   out(io,sni)).
+
+let ClientESNI_NOPSK() =
+     in(io,(host:prin,origin_host:prin));
+     get esniKeys(=host,=StrongDH,xxx,gs) in
+     let g = StrongDH in
+     let sni = secret_sni(origin_host) in
+
+     new cr:random;
+     let (x:bitstring,gx:element) = dh_keygen(g) in
+
+     let (c:bitstring,gc:element) = dh_keygen(g) in
+     new sni_nonce:random;
+     let gcs = e2b(dh_exp(g,gs,c)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let enc_sni = aead_enc(StrongAE,b2ae(aek),aeiv,(e2b(gx)),(sni_nonce,sni)) in
+     let sni_ext = SNI(e2b(gs)) in
+     let esni_ext = ESNI(g,gc,enc_sni) in
+
+     let ch = (cr,gx,sni_ext,esni_ext) in
+     out(io,ch);
+
+     in (io,(gy:element,msg:bitstring));
+     if gy <> BadElement then
+
+     let log = (ch,gy) in
+     let gxy = e2b(dh_exp(g,gy,x)) in
+     let kxy = hkdf_extract(zero,gxy) in
+     let aek = hkdf_expand_label(kxy,tls13_key,log) in
+     let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
+
+     let (=sni_nonce,(recv_sni:bitstring,p:pubkey),sig:bitstring) =
+     	 aead_dec(StrongAE,b2ae(aek),aeiv,zero,msg) in
+     let log = (log,sni_nonce,(sni,p)) in
+
+     get longTermKeys(=origin_host,xxxx,p) in
+     if recv_sni = sni then (
+	  if verify(p,log,sig) = true then
+	     event ESNIClientDone(sni,gs,p))
+     else (
+          event ESNIClientLeak(sni,gs,p);
+	  out(io,sni)).
+
+
+let ServerESNI_NOPSK() =
+     in(io,host:prin);
+     get esniKeys(=host,=StrongDH,s,gs) in
+     get longTermKeys(=host,sk,p) in
+     let g = StrongDH in
+
+     in(io,(ch:bitstring));
+     let (cr:random,gx:element,sn_ext:sni,esni:sni) = ch in
+
+     let ESNI(g,gc,enc_sni) = esni in
+     if gx <> BadElement then
+     if gc <> BadElement then
+     let gcs = e2b(dh_exp(g,gc,s)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let (sni_nonce:random,sni:bitstring) =
+     	 aead_dec(StrongAE,b2ae(aek),aeiv,(e2b(gx)),enc_sni) in
+
+     let origin_host = get_host(global_sni_secret(),sni) in
 
      let (y:bitstring,gy:element) = dh_keygen(g) in
-     let log = (cr,gx,esni,gy) in 
+     let log = (ch,gy) in
      let gxy = e2b(dh_exp(g,gx,y)) in
      let kxy = hkdf_extract(zero,gxy) in
      let aek = hkdf_expand_label(kxy,tls13_key,log) in
      let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
 
-     let enc_crt = aead_enc(StrongAE,b2ae(aek),aeiv,zero,msg2bytes(CRT(sni,p))) in
+     let log = (log,sni_nonce,(sni,p)) in
      let sig = sign(sk,log) in
-     out(io,(gy,enc_crt,sig));
-     event ESNIServerDone(sni,gs,p);
-     0.
+     let enc_sflt = aead_enc(StrongAE,b2ae(aek),aeiv,zero,
+				  (sni_nonce,(sni,p),sig)) in
+     out(io,(gy,enc_sflt));
+     event ESNIServerDone(sni,gs,p).
+
+let ClientESNI_NOPSK_HRR() =
+     in(io,(host:prin,origin_host:prin));
+     get esniKeys(=host,=StrongDH,xxx,gs) in
+     let g = StrongDH in
+     let sni = secret_sni(origin_host) in
+
+     new cr:random;
+     let (x:bitstring,gx:element) = dh_keygen(g) in
+
+     let (c:bitstring,gc:element) = dh_keygen(g) in
+     new sni_nonce:random;
+     let gcs = e2b(dh_exp(g,gs,c)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let enc_sni = aead_enc(StrongAE,b2ae(aek),aeiv,(e2b(gx)),(sni_nonce,sni)) in
+     let sni_ext = SNI(e2b(gs)) in
+     let esni_ext = ESNI(g,gc,enc_sni) in
+
+     let ch = (cr,gx,sni_ext,esni_ext) in
+     out(io,ch);
+
+     in (io,(hrr:bitstring));
+
+     let old_sni_nonce = sni_nonce in
+
+     new cr:random;
+     let (x:bitstring,gx:element) = dh_keygen(g) in
+     let (c:bitstring,gc:element) = dh_keygen(g) in
+     new sni_nonce:random;
+     let gcs = e2b(dh_exp(g,gs,c)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let enc_sni = aead_enc(StrongAE,b2ae(aek),aeiv,(e2b(gx)),(sni_nonce,sni)) in
+     let sni_ext = SNI(e2b(gs)) in
+     let esni_ext = ESNI(g,gc,enc_sni) in
+
+     let ch' = (cr,gx,sni_ext,esni_ext) in
+     out(io,ch');
+
+     in (io,(gy:element,msg:bitstring));
+     if gy <> BadElement then
+
+     let log = (ch,hrr,ch',gy) in
+     let gxy = e2b(dh_exp(g,gy,x)) in
+     let kxy' = hkdf_extract(zero,gxy) in
+     let kxy = hkdf_extract(kxy',random2b(old_sni_nonce)) in
+     let aek = hkdf_expand_label(kxy,tls13_key,log) in
+     let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
+
+     let (=old_sni_nonce,(recv_sni:bitstring,p:pubkey),sig:bitstring) =
+     	 aead_dec(StrongAE,b2ae(aek),aeiv,zero,msg) in
+     let log = (log,old_sni_nonce,(recv_sni,p)) in
+
+     event Reachable(log);
+
+     get longTermKeys(=origin_host,xxxx,p) in
+     if recv_sni = sni then (
+	  if verify(p,log,sig) = true then
+	     event ESNIClientDone(sni,gs,p))
+     else (
+          event ESNIClientLeak(sni,gs,p);
+	  out(io,sni)).
+
+
+let ServerESNI_NOPSK_HRR() =
+     in(io,host:prin);
+     get esniKeys(=host,=StrongDH,s,gs) in
+     get longTermKeys(=host,sk,p) in
+     let g = StrongDH in
+
+     in(io,(ch:bitstring));
+     let (cr:random,gx:element,sn_ext:sni,esni:sni) = ch in
+
+     let ESNI(g,gc,enc_sni) = esni in
+     if gx <> BadElement then
+     if gc <> BadElement then
+     let gcs = e2b(dh_exp(g,gc,s)) in
+     let kcs = hkdf_extract(zero,gcs) in
+     let aek = hkdf_expand_label(kcs,tls13_esni_key,random2b(cr)) in
+     let aeiv = hkdf_expand_label(kcs,tls13_esni_iv,random2b(cr)) in
+     let (sni_nonce:random,sni:bitstring) =
+     	 aead_dec(StrongAE,b2ae(aek),aeiv,(e2b(gx)),enc_sni) in
+
+     let origin_host = get_host(global_sni_secret(),sni) in
+
+     let hrr = zero in
+     out (io,hrr);
+     in (io,(ch':bitstring));
+     let (cr:random,gx:element,sn_ext:sni,esni:sni) = ch' in
+
+     let (y:bitstring,gy:element) = dh_keygen(g) in
+     let log = (ch,hrr,ch',gy) in
+     let gxy = e2b(dh_exp(g,gx,y)) in
+     let kxy' = hkdf_extract(zero,gxy) in
+     let kxy = hkdf_extract(kxy',random2b(sni_nonce)) in
+     let aek = hkdf_expand_label(kxy,tls13_key,log) in
+     let aeiv = hkdf_expand_label(kxy,tls13_iv,log) in
+
+     let log = (log,sni_nonce,(sni,p)) in
+     let sig = sign(sk,log) in
+     let enc_sflt = aead_enc(StrongAE,b2ae(aek),aeiv,zero,
+				  (sni_nonce,(sni,p),sig)) in
+     out(io,(gy,enc_sflt));
+     event ESNIServerDone(sni,gs,p).
 
 query h:bitstring, gs:element, p:pubkey;
       event(ESNIClientDone(h,gs,p));
       event(ESNIServerDone(h,gs,p)).
-query host:prin,h:bitstring, gs:element, p:pubkey;
-      event(ESNIClientLeak(h,gs,p)) ==> event(WeakOrCompromisedKey(p));
+
+query origin_host:prin,h:bitstring, gs:element, p:pubkey, tkt:bitstring;
+      attacker(secret_sni(origin_host));
       event(ESNIClientLeak(h,gs,p));
-      attacker(secret_sni(host)).
+      event(ESNIServerLeak(h,gs,tkt)).
+
+query log:bitstring; event(Reachable(log)).
+
+const C:prin.
 process
-     !ClientESNI() | !ServerESNI() | !LongTermKeys()
+     new keyA:ae_key;
+     new keyB:ae_key;
+     new pskCA:bitstring;
+     new pskCB:bitstring;
+     let tktCA = aead_enc(StrongAE,keyA,zero,zero,pskCA) in
+     let tktCB = aead_enc(StrongAE,keyB,zero,zero,pskCB) in
+     insert preSharedKeys(C,A,tktCA,PSK(pskCA));
+     insert preSharedKeys(C,B,tktCB,PSK(pskCB));
+     insert ticketEncryptionKeys(A,keyA);
+     insert ticketEncryptionKeys(B,keyB);
+     (* !ClientESNI_PSK() | !ServerESNI_PSK() | !ClientESNI_NOPSK() | !ServerESNI_NOPSK() |*) !ClientESNI_NOPSK_HRR() | !ServerESNI_NOPSK_HRR() | !LongTermKeys()

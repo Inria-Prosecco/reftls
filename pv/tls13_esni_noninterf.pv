@@ -1,0 +1,89 @@
+(* Library Functions and Types *)
+type pubkey.
+type privkey.
+fun pk(privkey):pubkey.
+fun pke_enc(pubkey,bitstring):bitstring.
+fun pke_dec(privkey,bitstring):bitstring
+reduc forall sk:privkey, b:bitstring;
+      pke_dec(sk,pke_enc(pk(sk),b)) = b.
+
+type symkey.
+fun sym_enc(symkey,bitstring):bitstring.
+fun sym_dec(symkey,bitstring):bitstring
+reduc forall k:symkey, b:bitstring;
+      sym_dec(k,sym_enc(k,b)) = b.
+
+type nonce.
+fun kdf(nonce,bitstring): symkey.
+
+type dh_pub.
+type dh_priv.
+fun exp(dh_priv):dh_pub.
+fun dh_enc(dh_pub,nonce):bitstring.
+fun dh_dec(dh_priv,bitstring):nonce
+reduc forall sk:dh_priv, n:nonce;
+      dh_dec(sk,dh_enc(exp(sk),n)) = n.
+
+
+type domain.
+fun cert(domain): bitstring [data].
+
+free io:channel.
+
+(* ESNI Model *)
+event ESNIClientDone(domain,pubkey,nonce).
+event ESNIServerDone(domain,pubkey,nonce).
+
+const A: domain.
+const B: domain.
+const F: domain.
+
+free chosen_sni:domain [private].
+noninterf chosen_sni.
+
+letfun get_cert(d:domain) = cert(d).
+(* Using the following instead breaks noninterf of d:
+       if d = A then cert(A)
+       else if d = B then cert(B)
+       else cert(d).
+*)
+
+let ClientESNI(frontend:domain,pk_frontend:pubkey,origin:domain) =
+     new sni_nonce:nonce;
+     new x:dh_priv;
+     let gx = exp(x) in
+     let c = pke_enc(pk_frontend,(sni_nonce,origin)) in
+     let ch = (frontend,gx,c) in
+     out (io,ch);
+     in (io,(gy:bitstring,ecert:bitstring));
+     let gxy = dh_dec(x,gy) in
+     let k = kdf(gxy,(sni_nonce,ch)) in
+(* Using this instead has an attack:
+     let k = kdf(gxy,(ch)) in *)
+     let cert_origin = sym_dec(k,ecert) in
+     event ESNIClientDone(origin,pk_frontend,sni_nonce).
+
+let ServerESNI(frontend:domain,sk_frontend:privkey) =
+     in (io,ch:bitstring);
+     let (=frontend,gx:dh_pub,c:bitstring) = ch in
+     let (sni_nonce:nonce,origin:domain) = pke_dec(sk_frontend,c) in
+     let cert_origin = get_cert(origin) in
+     new gxy:nonce;
+     let gy = dh_enc(gx,gxy) in
+     let k = kdf(gxy,(sni_nonce,ch)) in 
+(* Using this instead has an attack:
+     let k = kdf(gxy,(ch)) in *)
+     let sh = gy in
+     let ecert = sym_enc(k,cert_origin) in
+     event ESNIServerDone(origin,pk(sk_frontend),sni_nonce);
+     out (io,(gy,ecert)).
+
+query h:domain, p:pubkey, n:nonce;
+      event(ESNIClientDone(h,p,n));
+      event(ESNIServerDone(h,p,n)).
+
+process
+  new skF:privkey;
+  let pkF = pk(skF) in
+  !ClientESNI(F,pkF,A) | !ClientESNI(F,pkF,B) | !ClientESNI(F,pkF,chosen_sni)
+  | !ServerESNI(F,skF)

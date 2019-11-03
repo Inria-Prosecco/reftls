@@ -41,12 +41,14 @@ const F: domain.
 free chosen_sni:domain [private].
 noninterf chosen_sni among (A,B,F).
 
+
 letfun get_cert(d:domain) = cert(d).
-(* Using the following instead would break noninterf of d because of the branch:
+(* Using the following instead would break noninterf of d because of the comparisons:
        if d = A then cert(A)
        else if d = B then cert(B)
        else cert(d).
 *)
+letfun validate_cert(d:domain,c:bitstring) = c = cert(d).
 
 let ClientESNI(frontend:domain,pk_frontend:pubkey,origin:domain) =
      new sni_nonce:nonce;
@@ -58,9 +60,10 @@ let ClientESNI(frontend:domain,pk_frontend:pubkey,origin:domain) =
      in (io,(gy:bitstring,ecert:bitstring));
      let gxy = dh_dec(x,gy) in
      let k = kdf(gxy,(sni_nonce,ch)) in
-(* Using this instead has an attack:
-     let k = kdf(gxy,(ch)) in *)
+(* Using this instead has an attack: *)
+(*     let k = kdf(gxy,(ch)) in  *)
      let cert_origin = sym_dec(k,ecert) in
+     if validate_cert(origin,cert_origin) then
      event ESNIClientDone(origin,pk_frontend,sni_nonce).
 
 let ServerESNI(frontend:domain,sk_frontend:privkey) =
@@ -70,9 +73,9 @@ let ServerESNI(frontend:domain,sk_frontend:privkey) =
      let cert_origin = get_cert(origin) in
      new gxy:nonce;
      let gy = dh_enc(gx,gxy) in
-     let k = kdf(gxy,(sni_nonce,ch)) in 
-(* Using this instead has an attack:
-     let k = kdf(gxy,(ch)) in *)
+     let k = kdf(gxy,(sni_nonce,ch)) in
+(* Using this instead has an attack: *)
+(*     let k = kdf(gxy,(ch)) in *)
      let sh = gy in
      let ecert = sym_enc(k,cert_origin) in
      event ESNIServerDone(origin,pk(sk_frontend),sni_nonce);

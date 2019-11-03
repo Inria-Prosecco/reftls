@@ -39,10 +39,10 @@ const B: domain.
 const F: domain.
 
 free chosen_sni:domain [private].
-noninterf chosen_sni.
+noninterf chosen_sni among (A,B,F).
 
 letfun get_cert(d:domain) = cert(d).
-(* Using the following instead breaks noninterf of d:
+(* Using the following instead would break noninterf of d because of the branch:
        if d = A then cert(A)
        else if d = B then cert(B)
        else cert(d).
@@ -79,11 +79,21 @@ let ServerESNI(frontend:domain,sk_frontend:privkey) =
      out (io,(gy,ecert)).
 
 query h:domain, p:pubkey, n:nonce;
-      event(ESNIClientDone(h,p,n));
-      event(ESNIServerDone(h,p,n)).
+      event(ESNIClientDone(F,p,n));
+      event(ESNIClientDone(A,p,n));
+      event(ESNIClientDone(B,p,n));
+      event(ESNIClientDone(chosen_sni,p,n));
+      event(ESNIServerDone(F,p,n));
+      event(ESNIServerDone(A,p,n));
+      event(ESNIServerDone(B,p,n));
+      event(ESNIServerDone(chosen_sni,p,n)).
+
 
 process
   new skF:privkey;
   let pkF = pk(skF) in
-  !ClientESNI(F,pkF,A) | !ClientESNI(F,pkF,B) | !ClientESNI(F,pkF,chosen_sni)
+    !ClientESNI(F,pkF,A)
+  | !ClientESNI(F,pkF,B)
+  | !ClientESNI(F,pkF,F)
+  | !ClientESNI(F,pkF,chosen_sni)
   | !ServerESNI(F,skF)

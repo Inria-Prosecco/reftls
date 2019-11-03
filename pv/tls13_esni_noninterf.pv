@@ -41,13 +41,15 @@ const F: domain.
 free chosen_sni:domain [private].
 noninterf chosen_sni among (A,B,F).
 
-
-letfun get_cert(d:domain) = cert(d).
-(* Using the following instead would break noninterf of d because of the comparisons:
-       if d = A then cert(A)
-       else if d = B then cert(B)
-       else cert(d).
+(* Parametric "sni-independent" processing of sni at the server *)
+letfun get_cert(sni:domain) = cert(sni).
+(* Using the following instead would break noninterf of sni
+   because of the comparisons:
+       if sni = A then cert(A)
+       else if sni = B then cert(B)
+       else cert(F).
 *)
+
 letfun validate_cert(d:domain,c:bitstring) = c = cert(d).
 
 let ClientESNI(frontend:domain,pk_frontend:pubkey,origin:domain) =

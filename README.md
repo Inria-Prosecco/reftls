@@ -38,7 +38,7 @@ the conditions in our "true" queries would cause them to be false.
 
 ## Computational Verification with CryptoVerif
 
-[Download CryptoVerif from the CryptoVerif website](http://cryptoverif.inria.fr). Up-to-date TLS models are included in the CryptoVerif distribution, in the subdirectory examples/tls13/
+[Download CryptoVerif from the CryptoVerif website](http://cryptoverif.inria.fr). Up-to-date TLS models are included in the CryptoVerif distribution, in the subdirectory `examples/tls13/`.
 
 The `.cv` files corresponding to the lemmas on the key schedule and to the protocol should be run by the command:
 

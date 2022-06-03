@@ -4,7 +4,7 @@
   "description": "A port of the miTLS/FlexTLS framework to JavaScript",
   "main": "src/tls.js",
   "dependencies": {
-    "jsrsasign": "^4.8.4",
+    "jsrsasign": "^8.0.20",
     "stack-trace": "^0.0.9"
   },
   "devDependencies": {

@@ -243,12 +243,12 @@ letfun kdf_k0(es:bitstring,log:bitstring) =
        	   
 
 letfun kdf_hs(es:bitstring,e:bitstring) = 
-       let extra = derive_secret(es,tls13_derived,hash(StrongHash,zero)) in
+       let extra = derive_secret(es,tls13_derived,zero) in
        hkdf_extract(extra,e).
 
 letfun kdf_ms(hs:bitstring,log:bitstring) = 
-       let extra = derive_secret(hs,tls13_derived,hash(StrongHash,zero)) in
-       let ms =   hkdf_extract(hs , zero) in
+       let extra = derive_secret(hs,tls13_derived,zero) in
+       let ms =   hkdf_extract(extra, zero) in
        let htsc = derive_secret(hs, tls13_client_handshake_traffic_secret, log) in
        let htss = derive_secret(hs, tls13_server_handshake_traffic_secret, log) in
        let kch =  hkdf_expand_label(htsc,tls13_key,zero) in

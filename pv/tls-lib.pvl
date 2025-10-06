@@ -37,7 +37,7 @@ const StrongDH: group [data].
 const WeakDH: group [data].
 
 type element.
-fun e2b(element): bitstring [data].
+fun e2b(element): bitstring [data,typeConverter].
 const BadElement: element [data].
 const G: element [data].
 

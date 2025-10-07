@@ -4,6 +4,7 @@
 
 free io:channel.
 const zero: bitstring.
+const empty_string: bitstring. (* "" in the RFC *)
 
 (********************************************************)
 (* Authenticated Encryption with Additional Data *)
@@ -231,38 +232,38 @@ letfun kdf_0() = hkdf_extract(zero,zero).
 
 letfun kdf_es(psk:preSharedKey) = 
        let es = hkdf_extract(zero,psk2b(psk)) in
-       let kb = derive_secret(es,tls13_resumption_psk_binder_key,zero) in
+       let kb = derive_secret(es,tls13_resumption_psk_binder_key,empty_string) in
        (es,b2mk(kb)).
 
 
 letfun kdf_k0(es:bitstring,log:bitstring) = 
        let atsc0 = derive_secret(es, tls13_client_early_traffic_secret, log) in
-       let kc0   = hkdf_expand_label(atsc0,tls13_key,zero) in
+       let kc0   = hkdf_expand_label(atsc0,tls13_key,empty_string) in
        let ems0   = derive_secret(es,tls13_early_exporter_master_secret,log) in
        (b2ae(kc0),ems0).
        	   
 
 letfun kdf_hs(es:bitstring,e:bitstring) = 
-       let extra = derive_secret(es,tls13_derived,zero) in
+       let extra = derive_secret(es,tls13_derived,empty_string) in
        hkdf_extract(extra,e).
 
 letfun kdf_ms(hs:bitstring,log:bitstring) = 
-       let extra = derive_secret(hs,tls13_derived,zero) in
+       let extra = derive_secret(hs,tls13_derived,empty_string) in
        let ms =   hkdf_extract(extra, zero) in
        let htsc = derive_secret(hs, tls13_client_handshake_traffic_secret, log) in
        let htss = derive_secret(hs, tls13_server_handshake_traffic_secret, log) in
-       let kch =  hkdf_expand_label(htsc,tls13_key,zero) in
-       let kcm =  hkdf_expand_label(htsc,tls13_finished,zero) in
-       let ksh =  hkdf_expand_label(htss,tls13_key,zero) in
-       let ksm =  hkdf_expand_label(htss,tls13_finished,zero) in
+       let kch =  hkdf_expand_label(htsc,tls13_key,empty_string) in
+       let kcm =  hkdf_expand_label(htsc,tls13_finished,empty_string) in
+       let ksh =  hkdf_expand_label(htss,tls13_key,empty_string) in
+       let ksm =  hkdf_expand_label(htss,tls13_finished,empty_string) in
        (ms,b2ae(kch),b2ae(ksh),b2mk(kcm),b2mk(ksm)).
 
 letfun kdf_k(ms:bitstring,log:bitstring) = 
        let atsc = derive_secret(ms, tls13_client_application_traffic_secret, log) in
        let atss = derive_secret(ms, tls13_server_application_traffic_secret, log) in
        let ems 	= derive_secret(ms, tls13_exporter_master_secret, log) in
-       let kc   = hkdf_expand_label(atsc,tls13_key,zero) in
-       let ks   = hkdf_expand_label(atss,tls13_key,zero) in
+       let kc   = hkdf_expand_label(atsc,tls13_key,empty_string) in
+       let ks   = hkdf_expand_label(atss,tls13_key,empty_string) in
        (b2ae(kc),b2ae(ks),ems).
 
 letfun kdf_psk(ms:bitstring, log:bitstring) = 
